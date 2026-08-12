@@ -1,0 +1,306 @@
+/* ============================================================
+   DIAMOND SHAPE ICONS
+   ============================================================ */
+
+@font-face {
+  font-family: "Diamond Icons";
+  src: url("/fonts/shape-icons.eot");
+  src:
+    url("/fonts/shape-icons.eot") format("embedded-opentype"),
+    url("/fonts/shape-icons.ttf") format("truetype"),
+    url("/fonts/shape-icons.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.diamond_icon {
+  font-family: "Diamond Icons" !important;
+  speak: never;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  display: inline-block;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Shape Icons */
+.icon-default:before {
+  content: "\e936";
+}
+
+/* Diamond Shapes */
+.icon-R:before {
+  content: "\ea2a" !important;
+}
+.icon-PR:before {
+  content: "\e94e" !important;
+}
+.icon-CU:before {
+  content: "\ea08";
+}
+.icon-E:before {
+  content: "\eb66" !important;
+}
+.icon-M:before {
+  content: "\ea20" !important;
+}
+.icon-O:before {
+  content: "\eba7" !important;
+}
+.icon-H:before {
+  content: "\eb71" !important;
+}
+.icon-RA:before {
+  content: "\e94c" !important;
+}
+.icon-SE:before {
+  content: "\ebb7";
+}
+.icon-TB:before {
+  content: "\ebd9";
+}
+.icon-BA:before {
+  content: "\ead9";
+}
+.icon-MOV:before {
+  content: "\e927";
+}
+.icon-MGC:before {
+  content: "\e93b";
+}
+.icon-TRI:before {
+  content: "\eb6a";
+}
+.icon-TSC:before {
+  content: "\ebf2";
+}
+.icon-TRA:before {
+  content: "\ebda";
+}
+.icon-CAD:before {
+  content: "\e912";
+}
+.icon-HM:before {
+  content: "\ebdc";
+}
+.icon-RB:before {
+  content: "\e935";
+}
+.icon-K:before {
+  content: "\e924";
+}
+.icon-LZ:before {
+  content: "\e925";
+}
+.icon-LZM:before {
+  content: "\e901";
+}
+.icon-SH:before {
+  content: "\e93a";
+}
+.icon-B:before {
+  content: "\e910";
+}
+.icon-HX:before {
+  content: "\e91f";
+}
+.icon-HXL:before {
+  content: "\e900";
+}
+.icon-OVS:before {
+  content: "\e92c";
+}
+.icon-FLW:before {
+  content: "\e91b";
+}
+.icon-PFL:before {
+  content: "\e932";
+}
+.icon-PC:before {
+  content: "\e904";
+}
+.icon-RMC:before {
+  content: "\e905";
+}
+.icon-OM:before {
+  content: "\e929";
+}
+.icon-FOM:before {
+  content: "\e903";
+}
+.icon-TP:before {
+  content: "\ebf4";
+}
+.icon-AML:before {
+  content: "\e90a";
+}
+.icon-BRO:before {
+  content: "\e902";
+}
+.icon-ROS:before {
+  content: "\ebde";
+}
+.icon-RRC:before {
+  content: "\e938";
+}
+.icon-PRC:before {
+  content: "\e930";
+}
+.icon-HRC:before {
+  content: "\e922";
+}
+
+/* Alias Names */
+.icon-ROUND:before {
+  content: "\ea2a" !important;
+}
+.icon-PRINCESS:before {
+  content: "\e94e" !important;
+}
+.icon-CUSHION:before {
+  content: "\ea08";
+}
+.icon-EMERALD:before {
+  content: "\eb66" !important;
+}
+.icon-MARQUISE:before {
+  content: "\ea20" !important;
+}
+.icon-OVAL:before {
+  content: "\eba7" !important;
+}
+.icon-HEART:before {
+  content: "\eb71" !important;
+}
+.icon-RADIANT:before {
+  content: "\e94c" !important;
+}
+.icon-SQUARE_EMERALD:before {
+  content: "\ebb7";
+}
+.icon-TAPERED_BAGUETTE:before {
+  content: "\ebd9";
+}
+.icon-BAGUETTE:before {
+  content: "\ead9";
+}
+.icon-MOVAL:before {
+  content: "\e927";
+}
+.icon-PEAR:before {
+  content: "\ea24" !important;
+}
+.icon-PEAR_STEP_CUT:before {
+  content: "\e92d";
+}
+.icon-TRIANGULAR:before {
+  content: "\eb6a";
+}
+.icon-TRIANGULAR_STEP_CUT:before {
+  content: "\ebf2";
+}
+.icon-TRAPEZOID:before {
+  content: "\ebda";
+}
+.icon-CADILLAC:before {
+  content: "\e912";
+}
+.icon-HALF_MOON:before {
+  content: "\ebdc";
+}
+.icon-RECTANGULAR_BRILLIANT:before {
+  content: "\e935";
+}
+.icon-KITE:before {
+  content: "\e924";
+}
+.icon-LOZENGE:before {
+  content: "\e925";
+}
+.icon-LOZENGE_MODIFIED:before {
+  content: "\e901";
+}
+.icon-SHIELD:before {
+  content: "\e93a";
+}
+.icon-BULLETS:before {
+  content: "\e910";
+}
+.icon-HEXAGON:before {
+  content: "\e91f";
+}
+.icon-HEXAGON_LONG:before {
+  content: "\e900";
+}
+.icon-OVAL_STEP_CUT:before {
+  content: "\e92c";
+}
+.icon-FLOWER:before {
+  content: "\e91b";
+}
+.icon-P_FLOWER:before {
+  content: "\e932";
+}
+.icon-PORTRAIT_CUT:before {
+  content: "\e904";
+}
+.icon-OLD_EUROPEAN_CUT:before {
+  content: "\e905";
+}
+.icon-OLD_MINER:before {
+  content: "\e929";
+}
+.icon-FANCY_OLD_MINER:before {
+  content: "\e903";
+}
+.icon-TULIP:before {
+  content: "\ebf4";
+}
+.icon-ANIMAL:before {
+  content: "\e90a";
+}
+.icon-BRIOLETTE:before {
+  content: "\e902";
+}
+.icon-FANCY_ROSE:before {
+  content: "\ebde";
+}
+.icon-ROUND_RC:before {
+  content: "\e938";
+}
+.icon-PEAR_RC:before {
+  content: "\e930";
+}
+.icon-ABC:before {
+  content: "\e909";
+}
+.icon-OH:before {
+  content: "\e96f";
+}
+.icon-RFGH:before {
+  content: "\e96f";
+}
+.icon-discount:before {
+  content: "\e956";
+}
+
+/* Size variants */
+.icon-sm {
+  font-size: 18px !important;
+}
+.icon-md {
+  font-size: 30px !important;
+}
+.icon-lg {
+  font-size: 48px !important;
+}
+.icon-xl {
+  font-size: 64px !important;
+}
+.icon-2xl {
+  font-size: 80px !important;
+}

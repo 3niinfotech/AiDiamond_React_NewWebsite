@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Block non-public/utility paths
+Disallow: /404
+Disallow: /*.json$
+Disallow: /assets/
+
+Sitemap: https://www.royalraysbv.com/sitemap.xml
