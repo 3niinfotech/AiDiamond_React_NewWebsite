@@ -17,6 +17,7 @@ import {
 import logoLight from "../../assets/images/whitelogo.png";
 import logoDark from "../../assets/images/logo.png";
 import { resetScrollPosition } from "../../utils/scroll";
+import { getAuthUser } from "../../data/firmData";
 
 const SCROLL_HIDE_START = 100;
 const SCROLL_DELTA_MIN = 5;
@@ -979,7 +980,10 @@ const Header = () => {
 
           <div className="hidden lg:flex items-center gap-5 xl:gap-6">
             <span className="hidden xl:block w-px h-6 bg-white/20" />
-            <button className="royal-login-btn">
+            <button
+              onClick={() => navigate(getAuthUser() ? "/firms" : "/login")}
+              className="royal-login-btn cursor-pointer"
+            >
               <span className="login-text">
                 <FaUser size={12} className="xl:text-[14px]" />
                 <span>Login</span>
@@ -999,7 +1003,7 @@ const Header = () => {
                 className={`royal-menu-line ${mobileMenuOpen ? "open" : ""}`}
                 animate={{
                   rotate: mobileMenuOpen ? 45 : 0,
-                  y: mobileMenuOpen ? 7.5 : 0,
+                  y: mobileMenuOpen ? 7 : 0,
                 }}
                 transition={{ duration: 0.45, ease: [0.65, 0, 0.35, 1] }}
               />
@@ -1007,7 +1011,6 @@ const Header = () => {
                 className={`royal-menu-line ${mobileMenuOpen ? "open" : ""}`}
                 animate={{
                   opacity: mobileMenuOpen ? 0 : 1,
-                  width: mobileMenuOpen ? "0%" : "70%",
                 }}
                 style={{ alignSelf: "center" }}
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
@@ -1016,7 +1019,7 @@ const Header = () => {
                 className={`royal-menu-line ${mobileMenuOpen ? "open" : ""}`}
                 animate={{
                   rotate: mobileMenuOpen ? -45 : 0,
-                  y: mobileMenuOpen ? -7.5 : 0,
+                  y: mobileMenuOpen ? -7 : 0,
                 }}
                 transition={{ duration: 0.45, ease: [0.65, 0, 0.35, 1] }}
               />
@@ -1080,7 +1083,13 @@ const Header = () => {
                   })}
                 </div>
                 <motion.div variants={menuItemVariants}>
-                  <button className="royal-drawer-login-btn">
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      navigate(getAuthUser() ? "/firms" : "/login");
+                    }}
+                    className="royal-drawer-login-btn cursor-pointer"
+                  >
                     <FaUser size={14} /> Login
                   </button>
                 </motion.div>

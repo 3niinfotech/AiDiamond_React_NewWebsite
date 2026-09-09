@@ -15,6 +15,10 @@ import BlogDetail from '../pages/BlogDetail/BlogDetail';
 import PrivacyPolicy from '../pages/Legal/PrivacyPolicy';
 import TermsOfUse from '../pages/Legal/TermsOfUse';
 import Sitemap from '../pages/Sitemap/Sitemap';
+import Login from '../pages/Auth/Login';
+import FirmSelection from '../pages/Firms/FirmSelection';
+import FirmBookLedger from '../pages/Firms/FirmBookLedger';
+import ProtectedRoute from '../components/auth/ProtectedRoute';
 
 const AppRoutes = () => {
   const location = useLocation();
@@ -22,6 +26,26 @@ const AppRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
+        {/* Auth & Firm Management Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/firms"
+          element={
+            <ProtectedRoute>
+              <FirmSelection />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/firms/:firmId"
+          element={
+            <ProtectedRoute>
+              <FirmBookLedger />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Website Public Pages */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/event" element={<Event />} />
