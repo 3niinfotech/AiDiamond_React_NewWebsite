@@ -93,6 +93,37 @@ html, body {
   overflow-x: hidden;
 }
 
+/* ===== VISIBLE CUSTOM SCROLLBAR FOR FIRM / VOUCHER TABLES ===== */
+.firm-table-scrollbar::-webkit-scrollbar,
+div.firm-table-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  height: 10px !important;
+  width: 10px !important;
+}
+
+.firm-table-scrollbar::-webkit-scrollbar-track,
+div.firm-table-scrollbar::-webkit-scrollbar-track {
+  background: #E8E8E4 !important;
+  border-radius: 4px;
+}
+
+.firm-table-scrollbar::-webkit-scrollbar-thumb,
+div.firm-table-scrollbar::-webkit-scrollbar-thumb {
+  background: #666666 !important;
+  border-radius: 4px;
+}
+
+.firm-table-scrollbar::-webkit-scrollbar-thumb:hover,
+div.firm-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #111111 !important;
+}
+
+.firm-table-scrollbar {
+  -ms-overflow-style: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #666666 #E8E8E4 !important;
+}
+
 /* ===== GRAIN ===== */
 .grain {
   position: fixed;

@@ -17,7 +17,7 @@ import {
   FaSortDown,
 } from "react-icons/fa";
 import {
-  FIRMS_CONFIG,
+  getAllFirms,
   getFirmById,
   getFirmRecords,
   saveFirmRecords,
@@ -56,11 +56,18 @@ const FirmBookLedger = () => {
   // Toast feedback
   const [toastMessage, setToastMessage] = useState(null);
 
+  const isSignatureBook = currentFirm.id === "signature-book" || currentFirm.isSignatureBook;
+
   // Form Fields
   const initialFormState = {
     date: new Date().toISOString().split("T")[0],
     description: "",
+    bankType: "NBF - USD",
     type: "Bank",
+    cashUsd: "",
+    cashAed: "",
+    aedBank: "",
+    usdBank: "",
     aed: "",
     crDr: "CR",
     amount: "",
@@ -84,10 +91,11 @@ const FirmBookLedger = () => {
 
   const summary = useMemo(() => calculateFirmSummary(records), [records]);
 
-  // Recalculate dynamic running balance
+  // Recalculate dynamic running balance in true chronological order (oldest to newest)
   const recordsWithBalance = useMemo(() => {
     let running = 0;
-    return records.map((item) => {
+    const chronological = [...records].reverse();
+    const calculated = chronological.map((item) => {
       const isCr = item.crDr === "CR" || Number(item.credit) > 0;
       const amt = Number(item.amount) || (isCr ? Number(item.credit) : Number(item.debit)) || 0;
       const credit = isCr ? amt : 0;
@@ -105,6 +113,8 @@ const FirmBookLedger = () => {
         bal: running,
       };
     });
+
+    return calculated.reverse();
   }, [records]);
 
   // Filtered Records
@@ -212,7 +222,12 @@ const FirmBookLedger = () => {
     setFormData({
       date: record.date || new Date().toISOString().split("T")[0],
       description: record.description || record.partyName || "",
+      bankType: record.bankType || record.type || "NBF - USD",
       type: record.type || "Bank",
+      cashUsd: record.cashUsd !== undefined ? String(record.cashUsd) : "",
+      cashAed: record.cashAed !== undefined ? String(record.cashAed) : "",
+      aedBank: record.aedBank !== undefined ? String(record.aedBank) : "",
+      usdBank: record.usdBank !== undefined ? String(record.usdBank) : "",
       aed: record.aed ? String(record.aed) : "",
       crDr: record.crDr || (record.credit > 0 ? "CR" : "DR"),
       amount: record.amount || record.credit || record.debit || "",
@@ -236,8 +251,22 @@ const FirmBookLedger = () => {
     const errors = {};
     if (!formData.date) errors.date = "Date is required";
     if (!formData.description?.trim()) errors.description = "Description is required";
-    if (!formData.amount || Number(formData.amount) <= 0) errors.amount = "Valid amount is required";
-    if (!formData.type) errors.type = "Type is required";
+
+    if (isSignatureBook) {
+      const hasAnyAmount =
+        Number(formData.cashUsd) > 0 ||
+        Number(formData.cashAed) > 0 ||
+        Number(formData.aedBank) > 0 ||
+        Number(formData.usdBank) > 0 ||
+        Number(formData.amount) > 0;
+      if (!hasAnyAmount) {
+        errors.amount = "At least one amount is required";
+      }
+    } else {
+      if (!formData.amount || Number(formData.amount) <= 0) errors.amount = "Valid amount is required";
+      if (!formData.type) errors.type = "Type is required";
+    }
+
     if (!formData.crDr) errors.crDr = "Select CR or DR";
 
     setFormErrors(errors);
@@ -248,9 +277,36 @@ const FirmBookLedger = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const amt = Number(formData.amount) || 0;
+    let amt = Number(formData.amount) || 0;
+    if (isSignatureBook) {
+      const cUsd = Number(formData.cashUsd) || 0;
+      const cAed = Number(formData.cashAed) || 0;
+      const bAed = Number(formData.aedBank) || 0;
+      const bUsd = Number(formData.usdBank) || 0;
+      amt = bUsd || cUsd || bAed || cAed || Number(formData.amount) || 0;
+    }
+
     const isCr = formData.crDr === "CR";
-    const aedVal = formData.aed ? Number(formData.aed) : 0;
+    const aedVal = formData.aed
+      ? Number(formData.aed)
+      : (Number(formData.aedBank) || Number(formData.cashAed) || 0);
+
+    const recordPayload = {
+      date: formData.date,
+      description: formData.description.trim(),
+      bankType: formData.bankType || formData.type,
+      type: isSignatureBook ? (formData.bankType || "NBF - USD") : formData.type,
+      cashUsd: Number(formData.cashUsd) || 0,
+      cashAed: Number(formData.cashAed) || 0,
+      aedBank: Number(formData.aedBank) || 0,
+      usdBank: Number(formData.usdBank) || 0,
+      aed: aedVal,
+      crDr: formData.crDr,
+      amount: amt,
+      credit: isCr ? amt : 0,
+      debit: !isCr ? amt : 0,
+      remark: formData.remark.trim(),
+    };
 
     let updatedList = [];
     if (isEditMode && selectedRecord) {
@@ -258,15 +314,7 @@ const FirmBookLedger = () => {
         r.id === selectedRecord.id
           ? {
               ...r,
-              date: formData.date,
-              description: formData.description.trim(),
-              type: formData.type,
-              aed: aedVal,
-              crDr: formData.crDr,
-              amount: amt,
-              credit: isCr ? amt : 0,
-              debit: !isCr ? amt : 0,
-              remark: formData.remark.trim(),
+              ...recordPayload,
             }
           : r
       );
@@ -274,15 +322,7 @@ const FirmBookLedger = () => {
     } else {
       const newEntry = {
         id: `rec-${currentFirm.id}-${Date.now()}`,
-        date: formData.date,
-        description: formData.description.trim(),
-        type: formData.type,
-        aed: aedVal,
-        crDr: formData.crDr,
-        amount: amt,
-        credit: isCr ? amt : 0,
-        debit: !isCr ? amt : 0,
-        remark: formData.remark.trim(),
+        ...recordPayload,
       };
       updatedList = [newEntry, ...records];
       showToast("New Data Entry added");
@@ -304,12 +344,42 @@ const FirmBookLedger = () => {
   };
 
   const handleExportCSV = () => {
-    exportToCSV(sortedRecords, `${currentFirm.shortCode}_Ledger`);
+    if (isSignatureBook) {
+      const dataToExport = sortedRecords.map((r) => ({
+        "Date": r.date || "-",
+        "Description": r.description || "-",
+        "Bank Type": r.bankType || r.type || "-",
+        "CASH (USD)": r.cashUsd || 0,
+        "CASH (AED)": r.cashAed || 0,
+        "AED (Bank)": r.aedBank || 0,
+        "USD (Bank)": r.usdBank || 0,
+        "CR/DR": r.crDr || "CR",
+        "Remark": r.remark || "-",
+      }));
+      exportToCSV(dataToExport, `Signature_Book_Ledger`);
+    } else {
+      exportToCSV(sortedRecords, `${currentFirm.shortCode}_Ledger`);
+    }
     showToast("Exported to CSV");
   };
 
   const handleExportExcel = () => {
-    exportToExcel(sortedRecords, currentFirm.name, `${currentFirm.shortCode}_Ledger`);
+    if (isSignatureBook) {
+      const dataToExport = sortedRecords.map((r) => ({
+        "Date": r.date || "-",
+        "Description": r.description || "-",
+        "Bank Type": r.bankType || r.type || "-",
+        "CASH (USD)": r.cashUsd || 0,
+        "CASH (AED)": r.cashAed || 0,
+        "AED (Bank)": r.aedBank || 0,
+        "USD (Bank)": r.usdBank || 0,
+        "CR/DR": r.crDr || "CR",
+        "Remark": r.remark || "-",
+      }));
+      exportToExcel(dataToExport, currentFirm.name, `Signature_Book_Ledger`);
+    } else {
+      exportToExcel(sortedRecords, currentFirm.name, `${currentFirm.shortCode}_Ledger`);
+    }
     showToast("Exported to Excel (.xls)");
   };
 
@@ -355,7 +425,7 @@ const FirmBookLedger = () => {
             onChange={(e) => navigate(`/firms/${e.target.value}`)}
             className="px-3 py-1.5 bg-white border border-[#D1D1CB] rounded-sm text-xs font-semibold text-[#111111] focus:border-black outline-none cursor-pointer"
           >
-            {FIRMS_CONFIG.map((f) => (
+            {getAllFirms().map((f) => (
               <option key={f.id} value={f.id}>
                 {f.name} ({f.shortCode})
               </option>
@@ -385,7 +455,7 @@ const FirmBookLedger = () => {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer shadow-2xs hover:shadow-xs"
           >
             <FaPlus size={10} />
-            <span>Add Entry</span>
+            <span>{isSignatureBook ? "Add Party" : "Add Entry"}</span>
           </button>
         </div>
       </div>
@@ -529,129 +599,204 @@ const FirmBookLedger = () => {
 
         {/* =========================================================================
             GRID TABLE WITH ROW & COLUMN BORDERS AND EXACT FIELD ALIGNMENTS
-            - [Checkbox] (Center)
-            - Date (Center)
-            - Description (Left)
-            - Type (Center)
-            - AED (Right)
-            - CR / DR (Center)
-            - Amount (Right) -> STRICT RIGHT
-            - Bal (Right)    -> STRICT RIGHT
-            - Remark (Left)
-            - Action (Center) -> BIGGER BUTTONS
         ========================================================================= */}
         <div className="w-full bg-white border border-[#D1D1CB] rounded-sm overflow-hidden shadow-2xs">
           <div className="overflow-x-auto w-full">
             <table className="w-full min-w-[1000px] border-collapse text-xs">
               {/* Table Head with Column Borders & Aligned Titles */}
               <thead>
-                <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[#333333] uppercase tracking-wider text-[11px]">
-                  {/* 0. Checkbox Master Select */}
-                  <th className="py-1.5 px-2.5 text-center border-r border-[#D1D1CB] w-9">
-                    <input
-                      type="checkbox"
-                      checked={isAllSelected}
-                      onChange={toggleSelectAll}
-                      className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
-                      title="Select all rows"
-                    />
-                  </th>
+                {isSignatureBook ? (
+                  <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[#333333] uppercase tracking-wider text-[11px]">
+                    {/* 0. Checkbox Master Select */}
+                    <th className="py-1.5 px-2.5 text-center border-r border-[#D1D1CB] w-9">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        title="Select all rows"
+                      />
+                    </th>
 
-                  {/* 1. Date - Center */}
-                  <th
-                    onClick={() => handleSort("date")}
-                    className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      <span>Date</span>
-                      {sortField === "date" ? (
-                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                      ) : (
-                        <FaSort className="text-[#BBBBBB]" />
-                      )}
-                    </div>
-                  </th>
+                    {/* 1. Date */}
+                    <th
+                      onClick={() => handleSort("date")}
+                      className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Date</span>
+                        {sortField === "date" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
 
-                  {/* 2. Description - Left */}
-                  <th
-                    onClick={() => handleSort("description")}
-                    className="py-1.5 px-3.5 font-semibold text-left border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] select-none"
-                  >
-                    <div className="flex items-center justify-start gap-1">
-                      <span>Description</span>
-                      {sortField === "description" ? (
-                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                      ) : (
-                        <FaSort className="text-[#BBBBBB]" />
-                      )}
-                    </div>
-                  </th>
+                    {/* 2. Description */}
+                    <th
+                      onClick={() => handleSort("description")}
+                      className="py-1.5 px-3.5 font-semibold text-left border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] select-none"
+                    >
+                      <div className="flex items-center justify-start gap-1">
+                        <span>Description</span>
+                        {sortField === "description" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
 
-                  {/* 3. Type - Center */}
-                  <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
-                    Type
-                  </th>
+                    {/* 3. Bank Type */}
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      Bank Type
+                    </th>
 
-                  {/* 4. AED (Optional) - Right */}
-                  <th
-                    onClick={() => handleSort("aed")}
-                    className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <span>AED</span>
-                      {sortField === "aed" ? (
-                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                      ) : (
-                        <FaSort className="text-[#BBBBBB]" />
-                      )}
-                    </div>
-                  </th>
+                    {/* 4. CR / DR */}
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      CR / DR
+                    </th>
 
-                  {/* 5. CR / DR - Center */}
-                  <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
-                    CR / DR
-                  </th>
+                    {/* 5. CASH (USD) */}
+                    <th className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] whitespace-nowrap">
+                      CASH (USD)
+                    </th>
 
-                  {/* 6. Amount - Strictly Right Aligned */}
-                  <th
-                    onClick={() => handleSort("amount")}
-                    className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <span>Amount</span>
-                      {sortField === "amount" ? (
-                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                      ) : (
-                        <FaSort className="text-[#BBBBBB]" />
-                      )}
-                    </div>
-                  </th>
+                    {/* 6. CASH (AED) */}
+                    <th className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] whitespace-nowrap">
+                      CASH (AED)
+                    </th>
 
-                  {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
-                  <th
-                    onClick={() => handleSort("bal")}
-                    className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      <span>Bal</span>
-                      {sortField === "bal" ? (
-                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                      ) : (
-                        <FaSort className="text-[#BBBBBB]" />
-                      )}
-                    </div>
-                  </th>
+                    {/* 7. AED (Bank) */}
+                    <th className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] whitespace-nowrap">
+                      AED (Bank)
+                    </th>
 
-                  {/* 8. Remark - Left */}
-                  <th className="py-1.5 px-3 font-semibold text-left border-r border-[#D1D1CB]">
-                    Remark
-                  </th>
+                    {/* 8. USD (Bank) */}
+                    <th className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] whitespace-nowrap">
+                      USD (Bank)
+                    </th>
 
-                  {/* 9. Action - Center */}
-                  <th className="py-1.5 px-3 font-semibold text-center whitespace-nowrap">
-                    Action
-                  </th>
-                </tr>
+                    {/* 9. Remark */}
+                    <th className="py-1.5 px-3 font-semibold text-left border-r border-[#D1D1CB]">
+                      Remark
+                    </th>
+
+                    {/* 10. Action */}
+                    <th className="py-1.5 px-3 font-semibold text-center whitespace-nowrap">
+                      Action
+                    </th>
+                  </tr>
+                ) : (
+                  <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[#333333] uppercase tracking-wider text-[11px]">
+                    {/* 0. Checkbox Master Select */}
+                    <th className="py-1.5 px-2.5 text-center border-r border-[#D1D1CB] w-9">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        title="Select all rows"
+                      />
+                    </th>
+
+                    {/* 1. Date - Center */}
+                    <th
+                      onClick={() => handleSort("date")}
+                      className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        <span>Date</span>
+                        {sortField === "date" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* 2. Description - Left */}
+                    <th
+                      onClick={() => handleSort("description")}
+                      className="py-1.5 px-3.5 font-semibold text-left border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] select-none"
+                    >
+                      <div className="flex items-center justify-start gap-1">
+                        <span>Description</span>
+                        {sortField === "description" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* 3. Type - Center */}
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      Type
+                    </th>
+
+                    {/* 4. AED (Optional) - Right */}
+                    <th
+                      onClick={() => handleSort("aed")}
+                      className="py-1.5 px-3 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>AED</span>
+                        {sortField === "aed" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* 5. CR / DR - Center */}
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      CR / DR
+                    </th>
+
+                    {/* 6. Amount - Strictly Right Aligned */}
+                    <th
+                      onClick={() => handleSort("amount")}
+                      className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>Amount</span>
+                        {sortField === "amount" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
+                    <th
+                      onClick={() => handleSort("bal")}
+                      className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>Bal</span>
+                        {sortField === "bal" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* 8. Remark - Left */}
+                    <th className="py-1.5 px-3 font-semibold text-left border-r border-[#D1D1CB]">
+                      Remark
+                    </th>
+
+                    {/* 9. Action - Center */}
+                    <th className="py-1.5 px-3 font-semibold text-center whitespace-nowrap">
+                      Action
+                    </th>
+                  </tr>
+                )}
               </thead>
 
               {/* Table Body with Row & Column Grid Borders and Compact Height */}
@@ -689,59 +834,134 @@ const FirmBookLedger = () => {
                           {row.description || row.partyName}
                         </td>
 
-                        {/* 3. Type - Center */}
-                        <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs text-[#333333] font-medium">
-                          {row.type}
-                        </td>
+                        {isSignatureBook ? (
+                          <>
+                            {/* 3. Bank Type */}
+                            <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs text-[#333333] font-medium">
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-[#F5F5F2] border border-[#E0E0DB] font-semibold text-[#444444]">
+                                {row.bankType || row.type || "NBF - USD"}
+                              </span>
+                            </td>
 
-                        {/* 4. AED - Right */}
-                        <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
-                          {row.aed && Number(row.aed) > 0 ? (
-                            <span className="text-[#996600] font-semibold">
-                              {Number(row.aed).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </span>
-                          ) : (
-                            <span className="text-[#CCCCCC]">-</span>
-                          )}
-                        </td>
+                            {/* 4. CR / DR */}
+                            <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs">
+                              <span
+                                className={`inline-block min-w-[40px] px-1.5 py-0.2 rounded-full text-[10px] font-bold tracking-wider text-center ${
+                                  isCr
+                                    ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]"
+                                    : "bg-[#FEE2E2] text-[#991B1B] border border-[#FCA5A5]"
+                                }`}
+                              >
+                                {isCr ? "CR" : "DR"}
+                              </span>
+                            </td>
 
-                        {/* 5. CR / DR - Center */}
-                        <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs">
-                          <span
-                            className={`inline-block min-w-[40px] px-1.5 py-0.2 rounded-full text-[10px] font-bold tracking-wider text-center ${
-                              isCr
-                                ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]"
-                                : "bg-[#FEE2E2] text-[#991B1B] border border-[#FCA5A5]"
-                            }`}
-                          >
-                            {isCr ? "CR" : "DR"}
-                          </span>
-                        </td>
+                            {/* 5. CASH (USD) */}
+                            <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
+                              {row.cashUsd && Number(row.cashUsd) > 0 ? (
+                                <span className="text-[#15803D] font-semibold">
+                                  ${Number(row.cashUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-[#CCCCCC]">-</span>
+                              )}
+                            </td>
 
-                        {/* 6. Amount - Strictly Right Aligned */}
-                        <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-semibold whitespace-nowrap text-xs">
-                          <span className={isCr ? "text-[#166534]" : "text-[#991B1B]"}>
-                            {formatCurrency(amountVal)}
-                          </span>
-                        </td>
+                            {/* 6. CASH (AED) */}
+                            <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
+                              {row.cashAed && Number(row.cashAed) > 0 ? (
+                                <span className="text-[#B45309] font-semibold">
+                                  {Number(row.cashAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
+                                </span>
+                              ) : (
+                                <span className="text-[#CCCCCC]">-</span>
+                              )}
+                            </td>
 
-                        {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
-                        <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs">
-                          <span
-                            className={
-                              (row.runningBal || row.bal || 0) >= 0 ? "text-[#111111]" : "text-[#DC2626]"
-                            }
-                          >
-                            {formatCurrency(row.runningBal || row.bal || 0)}
-                          </span>
-                        </td>
+                            {/* 7. AED (Bank) */}
+                            <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
+                              {row.aedBank && Number(row.aedBank) > 0 ? (
+                                <span className="text-[#2563EB] font-semibold">
+                                  {Number(row.aedBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
+                                </span>
+                              ) : (
+                                <span className="text-[#CCCCCC]">-</span>
+                              )}
+                            </td>
 
-                        {/* 8. Remark - Left */}
-                        <td className="py-1.5 px-3 text-left border-r border-[#D1D1CB] text-xs text-[#555555]">
-                          {row.remark || row.remarks || "-"}
-                        </td>
+                            {/* 8. USD (Bank) */}
+                            <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
+                              {row.usdBank && Number(row.usdBank) > 0 ? (
+                                <span className="text-[#7C3AED] font-semibold">
+                                  ${Number(row.usdBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-[#CCCCCC]">-</span>
+                              )}
+                            </td>
 
-                        {/* 9. Action - Balanced, crisp buttons */}
+                            {/* 9. Remark */}
+                            <td className="py-1.5 px-3 text-left border-r border-[#D1D1CB] text-xs text-[#555555]">
+                              {row.remark || row.remarks || "-"}
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            {/* 3. Type - Center */}
+                            <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs text-[#333333] font-medium">
+                              {row.type}
+                            </td>
+
+                            {/* 4. AED - Right */}
+                            <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
+                              {row.aed && Number(row.aed) > 0 ? (
+                                <span className="text-[#996600] font-semibold">
+                                  {Number(row.aed).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : (
+                                <span className="text-[#CCCCCC]">-</span>
+                              )}
+                            </td>
+
+                            {/* 5. CR / DR - Center */}
+                            <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap text-xs">
+                              <span
+                                className={`inline-block min-w-[40px] px-1.5 py-0.2 rounded-full text-[10px] font-bold tracking-wider text-center ${
+                                  isCr
+                                    ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]"
+                                    : "bg-[#FEE2E2] text-[#991B1B] border border-[#FCA5A5]"
+                                }`}
+                              >
+                                {isCr ? "CR" : "DR"}
+                              </span>
+                            </td>
+
+                            {/* 6. Amount - Strictly Right Aligned */}
+                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-semibold whitespace-nowrap text-xs">
+                              <span className={isCr ? "text-[#166534]" : "text-[#991B1B]"}>
+                                {formatCurrency(amountVal)}
+                              </span>
+                            </td>
+
+                            {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
+                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs">
+                              <span
+                                className={
+                                  (row.runningBal || row.bal || 0) >= 0 ? "text-[#111111]" : "text-[#DC2626]"
+                                }
+                              >
+                                {formatCurrency(row.runningBal || row.bal || 0)}
+                              </span>
+                            </td>
+
+                            {/* 8. Remark - Left */}
+                            <td className="py-1.5 px-3 text-left border-r border-[#D1D1CB] text-xs text-[#555555]">
+                              {row.remark || row.remarks || "-"}
+                            </td>
+                          </>
+                        )}
+
+                        {/* Action column */}
                         <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
@@ -756,14 +976,14 @@ const FirmBookLedger = () => {
                               className="w-7 h-7 rounded-sm bg-white hover:bg-[#F0FDF4] border border-[#D1D1CB] hover:border-[#86EFAC] text-[#166534] flex items-center justify-center transition-all shadow-2xs cursor-pointer"
                               title="Edit Entry"
                             >
-                              <FaEdit size={12} />
+                              <FaEdit size={11} />
                             </button>
                             <button
                               onClick={() => handleOpenDeleteModal(row)}
-                              className="w-7 h-7 rounded-sm bg-white hover:bg-[#FEF2F2] border border-[#D1D1CB] hover:border-[#FCA5A5] text-[#DC2626] flex items-center justify-center transition-all shadow-2xs cursor-pointer"
+                              className="w-7 h-7 rounded-sm bg-white hover:bg-[#FEF2F2] border border-[#D1D1CB] hover:border-[#FCA5A5] text-[#991B1B] flex items-center justify-center transition-all shadow-2xs cursor-pointer"
                               title="Delete Entry"
                             >
-                              <FaTrash size={11} />
+                              <FaTrash size={10} />
                             </button>
                           </div>
                         </td>
@@ -772,21 +992,13 @@ const FirmBookLedger = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="10" className="py-10 text-center text-[#777777]">
-                      <FaBook className="mx-auto text-[#CCCCCC] text-2xl mb-2" />
-                      <p className="text-sm text-[#333333] font-semibold">No ledger records found</p>
+                    <td colSpan={isSignatureBook ? 11 : 10} className="py-10 text-center text-[#777777] text-xs">
+                      No matching records found. Click "Add Entry" to create a new ledger entry.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-          </div>
-
-          <div className="py-2.5 px-4 bg-[#FAFAF8] border-t border-[#D1D1CB] flex items-center justify-between text-xs text-[#555555] font-medium">
-            <span>
-              Showing <strong>{sortedRecords.length}</strong> records (Full List • No Pagination)
-            </span>
-            <span>{currentFirm.name} Bourse Ledger</span>
           </div>
         </div>
       </main>
@@ -796,7 +1008,7 @@ const FirmBookLedger = () => {
       ========================================================================= */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white border border-[#D1D1CB] rounded-sm shadow-xl overflow-hidden">
+          <div className="relative w-full max-w-lg bg-white border border-[#D1D1CB] rounded-sm shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-3 bg-[#FAFAF8] border-b border-[#E8E8E4] flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#111111]">
                 {isEditMode ? "Update Data Entry Form" : "New Data Entry Form"} — {currentFirm.name}
@@ -810,114 +1022,256 @@ const FirmBookLedger = () => {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-5 space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                    Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
-                  />
-                  {formErrors.date && (
-                    <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
-                  )}
-                </div>
+            <form onSubmit={handleFormSubmit} className="p-5 space-y-3.5 text-xs">
+              {isSignatureBook ? (
+                <>
+                  {/* Row 1: Date & CR/DR */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
+                      />
+                      {formErrors.date && (
+                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                    Type *
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
-                  >
-                    <option value="Bank">Bank</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Angadia">Angadia</option>
-                    <option value="Dubai Wire">Dubai Wire</option>
-                    <option value="Cheque">Cheque</option>
-                  </select>
-                </div>
-              </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        CR / DR *
+                      </label>
+                      <select
+                        value={formData.crDr}
+                        onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] font-semibold outline-none cursor-pointer"
+                      >
+                        <option value="CR">CR (Credit / Inflow)</option>
+                        <option value="DR">DR (Debit / Outflow)</option>
+                      </select>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  Description / Party Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter party name or description"
-                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                />
-                {formErrors.description && (
-                  <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
-                )}
-              </div>
+                  {/* Row 2: Bank Type & Description */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Bank Type *
+                      </label>
+                      <select
+                        value={formData.bankType || "NBF - USD"}
+                        onChange={(e) => setFormData({ ...formData, bankType: e.target.value, type: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                      >
+                        <option value="NBF - USD">NBF - USD</option>
+                        <option value="NBF - AED">NBF - AED</option>
+                        <option value="IndusInd">IndusInd</option>
+                        <option value="CASH - AED">CASH - AED</option>
+                        <option value="CASH - USD">CASH - USD</option>
+                      </select>
+                    </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                    CR / DR *
-                  </label>
-                  <select
-                    value={formData.crDr}
-                    onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
-                  >
-                    <option value="CR">CR (Credit / Inflow)</option>
-                    <option value="DR">DR (Debit / Outflow)</option>
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Description *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Enter transaction description..."
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                      />
+                      {formErrors.description && (
+                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
+                      )}
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                    Amount *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.amount}
-                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Enter transaction amount"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                  />
-                  {formErrors.amount && (
-                    <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
-                  )}
-                </div>
-              </div>
+                  {/* Row 3: Cash & Bank Breakdown */}
+                  <div className="bg-[#FAFAF8] p-3 rounded-sm border border-[#E8E8E4] space-y-2.5">
+                    <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                      Cash & Bank Figures
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                          CASH (USD)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.cashUsd}
+                          onChange={(e) => setFormData({ ...formData, cashUsd: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
+                        />
+                      </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  AED Amount (Optional)
-                </label>
-                <input
-                  type="number"
-                  value={formData.aed}
-                  onChange={(e) => setFormData({ ...formData, aed: e.target.value })}
-                  placeholder="Enter AED amount (if applicable)"
-                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                />
-              </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                          CASH (AED)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.cashAed}
+                          onChange={(e) => setFormData({ ...formData, cashAed: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
+                        />
+                      </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  Remark / Note
-                </label>
-                <input
-                  type="text"
-                  value={formData.remark}
-                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                  placeholder="Enter reference note or voucher details"
-                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                />
-              </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                          AED (Bank)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.aedBank}
+                          onChange={(e) => setFormData({ ...formData, aedBank: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                          USD (Bank)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={formData.usdBank}
+                          onChange={(e) => setFormData({ ...formData, usdBank: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
+                        />
+                      </div>
+                    </div>
+                    {formErrors.amount && (
+                      <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
+                    )}
+                  </div>
+
+                  {/* Row 4: Remark */}
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                      Remark / Note
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.remark}
+                      onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                      placeholder="Enter reference note or voucher details..."
+                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none resize-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
+                      />
+                      {formErrors.date && (
+                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Type *
+                      </label>
+                      <select
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                      >
+                        <option value="Bank">Bank</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Angadia">Angadia</option>
+                        <option value="Dubai Wire">Dubai Wire</option>
+                        <option value="Cheque">Cheque</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                      Description / Party Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Enter party name or description"
+                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                    />
+                    {formErrors.description && (
+                      <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        CR / DR *
+                      </label>
+                      <select
+                        value={formData.crDr}
+                        onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                      >
+                        <option value="CR">CR (Credit / Inflow)</option>
+                        <option value="DR">DR (Debit / Outflow)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                        Amount *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.amount}
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        placeholder="Enter transaction amount"
+                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                      />
+                      {formErrors.amount && (
+                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                      Remark / Note
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.remark}
+                      onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                      placeholder="Enter reference note or voucher details"
+                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="pt-3 border-t border-[#E8E8E4] flex items-center justify-end gap-2.5">
                 <button
@@ -944,7 +1298,7 @@ const FirmBookLedger = () => {
       ========================================================================= */}
       {isViewModalOpen && selectedRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-white border border-[#D1D1CB] rounded-sm shadow-xl overflow-hidden">
+          <div className="relative w-full max-w-lg bg-white border border-[#D1D1CB] rounded-sm shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-3 bg-[#FAFAF8] border-b border-[#E8E8E4] flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[#111111]">
                 Voucher Details — {currentFirm.name}
@@ -958,91 +1312,167 @@ const FirmBookLedger = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Date</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={selectedRecord.date || ""}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Type</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={selectedRecord.type || ""}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
-                  />
-                </div>
-              </div>
+            <div className="p-5 space-y-3 text-xs">
+              {isSignatureBook ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#777777]">Date</span>
+                      <p className="font-mono font-semibold text-[#111111]">{selectedRecord.date || "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#777777]">Bank Type</span>
+                      <p className="font-semibold text-[#111111]">{selectedRecord.bankType || selectedRecord.type || "-"}</p>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Description / Party</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={selectedRecord.description || selectedRecord.partyName || ""}
-                  className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] font-semibold outline-none"
-                />
-              </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#777777]">Description</span>
+                    <p className="font-bold text-sm text-[#111111]">{selectedRecord.description || selectedRecord.partyName || "-"}</p>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">CR / DR</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={selectedRecord.crDr === "CR" ? "CR (Credit / Inflow)" : "DR (Debit / Outflow)"}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
-                  />
-                </div>
+                  <div className="bg-[#FAFAF8] p-3 rounded-sm border border-[#E8E8E4] space-y-2">
+                    <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                      Cash & Bank Figures
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (USD)</span>
+                        <p className="font-mono font-bold text-[#15803D]">
+                          {selectedRecord.cashUsd ? `$${Number(selectedRecord.cashUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (AED)</span>
+                        <p className="font-mono font-bold text-[#B45309]">
+                          {selectedRecord.cashAed ? `${Number(selectedRecord.cashAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#777777]">AED (Bank)</span>
+                        <p className="font-mono font-bold text-[#2563EB]">
+                          {selectedRecord.aedBank ? `${Number(selectedRecord.aedBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#777777]">USD (Bank)</span>
+                        <p className="font-mono font-bold text-[#7C3AED]">
+                          {selectedRecord.usdBank ? `$${Number(selectedRecord.usdBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Amount</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formatCurrency(selectedRecord.amount || selectedRecord.credit || selectedRecord.debit)}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 gap-3 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#777777]">Nature (CR / DR)</span>
+                      <p className="font-bold text-[#111111]">
+                        {selectedRecord.crDr === "CR" ? "CR (Credit / Inflow)" : "DR (Debit / Outflow)"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#777777]">Total Effective Amount</span>
+                      <p className="font-mono font-bold text-sm text-[#111111]">
+                        {formatCurrency(selectedRecord.amount || selectedRecord.credit || selectedRecord.debit)}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">AED</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={selectedRecord.aed && Number(selectedRecord.aed) > 0 ? `${Number(selectedRecord.aed).toLocaleString()} AED` : "-"}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
-                  />
-                </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#777777]">Remark</span>
+                    <p className="text-[#555555] italic bg-[#F9F9F7] p-2 rounded border border-[#EAEAEA]">
+                      "{selectedRecord.remark || selectedRecord.remarks || "No remark provided"}"
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Date</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedRecord.date || ""}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Type</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedRecord.type || ""}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
+                      />
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Running Balance</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={formatCurrency(selectedRecord.runningBal || selectedRecord.bal || 0)}
-                    className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Description / Party</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={selectedRecord.description || selectedRecord.partyName || ""}
+                      className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] font-semibold outline-none"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Remark</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={selectedRecord.remark || selectedRecord.remarks || "-"}
-                  className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#555555] outline-none"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">CR / DR</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedRecord.crDr === "CR" ? "CR (Credit / Inflow)" : "DR (Debit / Outflow)"}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Amount</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formatCurrency(selectedRecord.amount || selectedRecord.credit || selectedRecord.debit)}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">AED</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={selectedRecord.aed && Number(selectedRecord.aed) > 0 ? `${Number(selectedRecord.aed).toLocaleString()} AED` : "-"}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#111111] outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Running Balance</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formatCurrency(selectedRecord.runningBal || selectedRecord.bal || 0)}
+                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Remark</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={selectedRecord.remark || selectedRecord.remarks || "-"}
+                      className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#555555] outline-none"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="pt-3 border-t border-[#E8E8E4] flex items-center justify-end gap-2.5">
                 <button

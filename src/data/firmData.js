@@ -58,6 +58,19 @@ export const FIRMS_CONFIG = [
     bgGradient: "linear-gradient(135deg, rgba(232, 197, 116, 0.15) 0%, rgba(10, 10, 12, 0.95) 100%)",
     icon: "FaGlobe",
   },
+  {
+    id: "signature-book",
+    name: "SIGNATURE BOOK",
+    shortCode: "SGB",
+    tagline: "Signature Multi-Currency & Bank Accounts Ledger",
+    description: "Multi-currency bank & cash accounts ledger for NBF, IndusInd, and cash balances in USD & AED.",
+    badge: "Signature Division",
+    founded: "2024",
+    accentColor: "#B45309",
+    bgGradient: "linear-gradient(135deg, rgba(180, 83, 9, 0.15) 0%, rgba(10, 10, 12, 0.95) 100%)",
+    icon: "FaBookOpen",
+    isSignatureBook: true,
+  },
 ];
 
 export const INITIAL_LEDGER_RECORDS = {
@@ -348,15 +361,161 @@ export const INITIAL_LEDGER_RECORDS = {
       remark: "Armored door-to-door vault transit Antwerp to Surat Bourse",
     },
   ],
+  "signature-book": [
+    {
+      id: "rec-sig-001",
+      date: "2026-09-08",
+      description: "Direct Wire Inward - Dubai Client Settlement",
+      bankType: "NBF - USD",
+      type: "NBF - USD",
+      cashUsd: 0,
+      cashAed: 0,
+      aedBank: 0,
+      usdBank: 125000,
+      amount: 125000,
+      credit: 125000,
+      debit: 0,
+      crDr: "CR",
+      remark: "Ref #NBF-9921 Received from Dubai Diamond Exchange",
+    },
+    {
+      id: "rec-sig-002",
+      date: "2026-09-07",
+      description: "Local Office Expense & Vault Charges",
+      bankType: "CASH - AED",
+      type: "CASH - AED",
+      cashUsd: 0,
+      cashAed: 15400,
+      aedBank: 0,
+      usdBank: 0,
+      amount: 15400,
+      credit: 0,
+      debit: 15400,
+      crDr: "DR",
+      remark: "DMCC Almas Tower Vault Settlement",
+    },
+    {
+      id: "rec-sig-003",
+      date: "2026-09-05",
+      description: "IndusInd Bank TT Outward - Rough Procurement",
+      bankType: "IndusInd",
+      type: "IndusInd",
+      cashUsd: 0,
+      cashAed: 0,
+      aedBank: 0,
+      usdBank: 84500,
+      amount: 84500,
+      credit: 0,
+      debit: 84500,
+      crDr: "DR",
+      remark: "Sight Allocation TT Transfer Ref #IN-4428",
+    },
+    {
+      id: "rec-sig-004",
+      date: "2026-09-04",
+      description: "Cash Receipt - Local Parcel Sale",
+      bankType: "CASH - USD",
+      type: "CASH - USD",
+      cashUsd: 45000,
+      cashAed: 0,
+      aedBank: 0,
+      usdBank: 0,
+      amount: 45000,
+      credit: 45000,
+      debit: 0,
+      crDr: "CR",
+      remark: "Cash payment received against voucher #V-102",
+    },
+    {
+      id: "rec-sig-005",
+      date: "2026-09-02",
+      description: "NBF Corporate Account AED Credit",
+      bankType: "NBF - AED",
+      type: "NBF - AED",
+      cashUsd: 0,
+      cashAed: 0,
+      aedBank: 367250,
+      usdBank: 0,
+      amount: 367250,
+      credit: 367250,
+      debit: 0,
+      crDr: "CR",
+      remark: "AED inward wire from Emirates NBD",
+    },
+  ],
 };
 
 const STORAGE_KEY_PREFIX = "royal_rays_firm_records_v2_";
+const CUSTOM_FIRMS_STORAGE_KEY = "royal_rays_custom_firms_v1";
 const AUTH_KEY = "royal_rays_auth_user";
 
-export const getAllFirms = () => FIRMS_CONFIG;
+export const getCustomFirms = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(CUSTOM_FIRMS_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (err) {
+    console.error("Error reading custom firms:", err);
+  }
+  return [];
+};
+
+export const addCustomFirm = (firmObj) => {
+  if (typeof window === "undefined") return [];
+  try {
+    const existing = getCustomFirms();
+    const updated = [...existing, firmObj];
+    localStorage.setItem(CUSTOM_FIRMS_STORAGE_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (err) {
+    console.error("Error saving custom firm:", err);
+    return [];
+  }
+};
+
+export const updateFirm = (firmId, updatedFields) => {
+  if (typeof window === "undefined") return [];
+  try {
+    const existingCustom = getCustomFirms();
+    const isCustom = existingCustom.some((f) => f.id === firmId);
+    if (isCustom) {
+      const updated = existingCustom.map((f) => (f.id === firmId ? { ...f, ...updatedFields } : f));
+      localStorage.setItem(CUSTOM_FIRMS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    } else {
+      const found = FIRMS_CONFIG.find((f) => f.id === firmId);
+      if (found) {
+        const updated = [...existingCustom, { ...found, ...updatedFields }];
+        localStorage.setItem(CUSTOM_FIRMS_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      }
+    }
+  } catch (err) {
+    console.error("Error updating firm:", err);
+  }
+  return [];
+};
+
+export const deleteFirm = (firmId) => {
+  if (typeof window === "undefined") return;
+  try {
+    const existingCustom = getCustomFirms();
+    const filtered = existingCustom.filter((f) => f.id !== firmId);
+    localStorage.setItem(CUSTOM_FIRMS_STORAGE_KEY, JSON.stringify(filtered));
+    resetFirmRecords(firmId);
+  } catch (err) {
+    console.error("Error deleting firm:", err);
+  }
+};
+
+export const getAllFirms = () => {
+  const custom = getCustomFirms();
+  return [...FIRMS_CONFIG, ...custom];
+};
 
 export const getFirmById = (firmId) => {
-  return FIRMS_CONFIG.find((f) => f.id === firmId) || FIRMS_CONFIG[0];
+  const all = getAllFirms();
+  return all.find((f) => f.id === firmId) || all[0];
 };
 
 /**
@@ -375,9 +534,10 @@ export const getFirmRecords = (firmId) => {
     }
   }
 
-  // Calculate Running Balance in chronological order
+  // Calculate Running Balance in chronological order (oldest to newest)
   let running = 0;
-  const withBalance = list.map((item) => {
+  const chronological = [...list].reverse();
+  const calculatedChronological = chronological.map((item) => {
     const isCr = item.crDr === "CR" || (Number(item.credit) > 0);
     const amt = Number(item.amount) || (isCr ? Number(item.credit) : Number(item.debit)) || 0;
     const credit = isCr ? amt : 0;
@@ -396,7 +556,7 @@ export const getFirmRecords = (firmId) => {
     };
   });
 
-  return withBalance;
+  return calculatedChronological.reverse();
 };
 
 export const saveFirmRecords = (firmId, records) => {
@@ -412,7 +572,7 @@ export const resetFirmRecords = (firmId) => {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(`${STORAGE_KEY_PREFIX}${firmId}`);
-  } catch (err) {}
+  } catch (err) { }
 };
 
 export const calculateFirmSummary = (records = []) => {
@@ -436,7 +596,7 @@ export const calculateFirmSummary = (records = []) => {
 };
 
 export const formatCurrency = (amount, currency = "INR") => {
-  if (amount === undefined || amount === null || isNaN(amount)) return "₹0";
+  if (amount === undefined || amount === null || isNaN(amount)) return "0";
   const num = Number(amount);
   if (currency === "AED") {
     return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " AED";
@@ -444,7 +604,7 @@ export const formatCurrency = (amount, currency = "INR") => {
   if (currency === "USD") {
     return "$" + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  return "₹" + num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return "" + num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 };
 
 export const MASTER_CREDENTIALS = {

@@ -18,6 +18,9 @@ import Sitemap from '../pages/Sitemap/Sitemap';
 import Login from '../pages/Auth/Login';
 import FirmSelection from '../pages/Firms/FirmSelection';
 import FirmBookLedger from '../pages/Firms/FirmBookLedger';
+import PartyMaster from '../pages/Firms/PartyMaster';
+import Signature from '../pages/Firms/signature';
+import VoucherEntryPage from '../pages/Firms/VoucherEntryPage';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 
 const AppRoutes = () => {
@@ -33,6 +36,30 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <FirmSelection />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/party-master"
+          element={
+            <ProtectedRoute>
+              <PartyMaster />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/signature"
+          element={
+            <ProtectedRoute>
+              <Signature />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/signature/:voucherType"
+          element={
+            <ProtectedRoute>
+              <VoucherEntryPage />
             </ProtectedRoute>
           }
         />

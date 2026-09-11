@@ -5,13 +5,14 @@ import {
   FaArrowRight,
   FaSearch,
   FaSignOutAlt,
-  FaUserShield,
   FaBuilding,
   FaExchangeAlt,
+  FaUsers,
+  FaFileSignature,
 } from "react-icons/fa";
 import logoDark from "../../assets/images/logo.png";
 import {
-  FIRMS_CONFIG,
+  getAllFirms,
   getFirmRecords,
   calculateFirmSummary,
   formatCurrency,
@@ -23,6 +24,7 @@ const FirmSelection = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
+  const [firms, setFirms] = useState([]);
   const [firmStats, setFirmStats] = useState({});
 
   useEffect(() => {
@@ -33,8 +35,11 @@ const FirmSelection = () => {
       setCurrentUser(user);
     }
 
+    const allFirms = getAllFirms();
+    setFirms(allFirms);
+
     const statsObj = {};
-    FIRMS_CONFIG.forEach((firm) => {
+    allFirms.forEach((firm) => {
       const records = getFirmRecords(firm.id);
       statsObj[firm.id] = calculateFirmSummary(records);
     });
@@ -46,12 +51,20 @@ const FirmSelection = () => {
     navigate("/login");
   };
 
-  const filteredFirms = FIRMS_CONFIG.filter(
+  const filteredFirms = firms.filter(
     (firm) =>
       firm.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      firm.tagline.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      firm.badge.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      firm.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (firm.shortCode &&
+        firm.shortCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (firm.tagline &&
+        firm.tagline.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (firm.badge &&
+        firm.badge.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (firm.description &&
+        firm.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (firm.trn && firm.trn.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (firm.contact &&
+        firm.contact.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const consolidatedStats = Object.values(firmStats).reduce(
@@ -69,10 +82,14 @@ const FirmSelection = () => {
       {/* Top Navbar */}
       <div className="w-full bg-white border-b border-[#E8E8E4] px-4 sm:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/">
-            <img src={logoDark} alt="Royal Rays" className="h-7 w-auto object-contain" />
+          {/* <Link to="/">
+            <img
+              src={logoDark}
+              alt="Royal Rays"
+              className="h-7 w-auto object-contain"
+            />
           </Link>
-          <span className="h-4 w-px bg-[#E0E0DB]" />
+          <span className="h-4 w-px bg-[#E0E0DB]" /> */}
           <span className="text-xs font-semibold uppercase tracking-wider text-[#333333]">
             Firm Portals
           </span>
@@ -94,26 +111,45 @@ const FirmSelection = () => {
 
       {/* Main Content */}
       <main className="flex-1 w-full px-4 sm:px-8 py-5">
-        {/* Title & Search */}
+        {/* Title & Search + Party Master Button */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#E8E8E4] mb-5">
           <div>
             <h1 className="text-xl font-serif font-medium text-[#111111]">
               Select Firm Book
             </h1>
             <p className="text-xs text-[#777777] mt-0.5">
-              Select one of the 4 firm books to manage transactions and export records.
+              Select one of the firm books to manage transactions and export records.
             </p>
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999999] text-xs" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search firm..."
-              className="w-full pl-8 pr-3 py-1.5 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-[#111111] placeholder-[#999999] outline-none"
-            />
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <div className="relative w-full sm:w-72">
+              <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#999999] text-xs" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search firm or party..."
+                className="w-full pl-8 pr-3 py-1.5 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-[#111111] placeholder-[#999999] outline-none"
+              />
+            </div>
+
+            <button
+              onClick={() => navigate("/party-master")}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-semibold uppercase tracking-wider shrink-0 transition-colors cursor-pointer shadow-2xs"
+              title="Open Party Master"
+            >
+              <FaUsers size={11} />
+              <span>Party Master</span>
+            </button>
+            <button
+              onClick={() => navigate("/signature")}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-semibold uppercase tracking-wider shrink-0 transition-colors cursor-pointer shadow-2xs"
+              title="Open signature"
+            >
+              <FaFileSignature size={11} />
+              <span>Signature</span>
+            </button>
           </div>
         </div>
 
@@ -130,10 +166,11 @@ const FirmSelection = () => {
                   Active Portals
                 </div>
                 <div className="text-base font-bold text-[#111111] leading-tight">
-                  4 Firm Books
+                  {firms.length} Firm {firms.length === 1 ? "Book" : "Books"}
                 </div>
-                <div className="text-[10px] text-[#888888]">
-                  MS • SHARDA • DARSH • BAJRANG
+                <div className="text-[10px] text-[#888888] truncate max-w-xs sm:max-w-sm">
+                  {firms.map((f) => f.shortCode || f.name).slice(0, 6).join(" • ")}
+                  {firms.length > 6 ? "..." : ""}
                 </div>
               </div>
             </div>
@@ -176,7 +213,7 @@ const FirmSelection = () => {
           </div>
         </div>
 
-        {/* 4 Firm Cards Grid */}
+        {/* Firm Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
           {filteredFirms.map((firm) => {
             const stats = firmStats[firm.id] || {
@@ -193,39 +230,39 @@ const FirmSelection = () => {
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <h2 className="text-base font-serif font-semibold text-[#111111]">
+                    <h2 className="text-base font-serif font-semibold text-[#111111] truncate" title={firm.name}>
                       {firm.name}
                     </h2>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-xs bg-[#F5F5F2] text-[#444444] border border-[#E8E8E4]">
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-xs bg-[#F5F5F2] text-[#444444] border border-[#E8E8E4] shrink-0">
                       {firm.shortCode}
                     </span>
                   </div>
-
-                  <p className="text-xs text-[#666666] font-medium mb-2">
-                    {firm.tagline}
-                  </p>
-
-                  <p className="text-[11px] text-[#777777] leading-relaxed mb-3 line-clamp-2">
-                    {firm.description}
-                  </p>
 
                   {/* Micro stats table */}
                   <div className="p-2.5 rounded-sm bg-[#FAFAF8] border border-[#EAEAE6] mb-3 text-[11px] space-y-1">
                     <div className="flex justify-between">
                       <span className="text-[#777777]">Entries:</span>
-                      <span className="font-medium text-[#111111]">{stats.totalCount} Vouchers</span>
+                      <span className="font-medium text-[#111111]">
+                        {stats.totalCount} Vouchers
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#777777]">Inflow (CR):</span>
-                      <span className="font-semibold text-[#16A34A]">{formatCurrency(stats.totalCredit)}</span>
+                      <span className="font-semibold text-[#16A34A]">
+                        {formatCurrency(stats.totalCredit)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#777777]">Outflow (DR):</span>
-                      <span className="font-semibold text-[#DC2626]">{formatCurrency(stats.totalDebit)}</span>
+                      <span className="font-semibold text-[#DC2626]">
+                        {formatCurrency(stats.totalDebit)}
+                      </span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-[#E8E8E4]">
                       <span className="text-[#777777]">Net Bal:</span>
-                      <span className="font-semibold text-[#111111]">{formatCurrency(stats.netBalance)}</span>
+                      <span className="font-semibold text-[#111111]">
+                        {formatCurrency(stats.netBalance)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -241,6 +278,18 @@ const FirmSelection = () => {
             );
           })}
         </div>
+
+        {filteredFirms.length === 0 && (
+          <div className="py-12 text-center bg-white border border-[#E5E5E0] rounded-sm p-6 mt-4">
+            <FaBuilding className="mx-auto text-[#CCCCCC] text-3xl mb-2" />
+            <p className="text-sm text-[#333333] font-semibold">
+              No firm books found matching "{searchQuery}"
+            </p>
+            <p className="text-xs text-[#777777] mt-1">
+              Try adjusting your search or go to Party Master to add a new party.
+            </p>
+          </div>
+        )}
       </main>
     </div>
   );
