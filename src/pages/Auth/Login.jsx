@@ -7,22 +7,16 @@ import {
   FaEyeSlash,
   FaArrowLeft,
   FaArrowRight,
-  FaShieldAlt,
   FaExclamationCircle,
-  FaGem,
 } from "react-icons/fa";
-import { RiDiamondFill, RiShieldCheckLine } from "react-icons/ri";
+import { RiShieldCheckLine } from "react-icons/ri";
 import logoDark from "../../assets/images/logo.png";
-import {
-  validateCredentials,
-  setAuthUser,
-  isAuthenticated,
-  FIRMS_CONFIG,
-} from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,41 +25,58 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Redirect if user is already authenticated
   useEffect(() => {
-    if (isAuthenticated()) {
+    if (isAuthenticated) {
       navigate("/firms", { replace: true });
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
-  const handleLogin = (e) => {
+  // Check if redirected due to expired session
+  useEffect(() => {
+    if (location.state?.sessionExpired) {
+      setError("Your session has expired. Please sign in again to continue.");
+    }
+  }, [location.state]);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!username.trim()) {
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername) {
       setError("Please enter your username.");
       return;
     }
 
-    if (!password.trim()) {
+    if (!cleanPassword) {
       setError("Please enter your password.");
       return;
     }
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const authResult = validateCredentials(username, password);
+    try {
+      await login({
+        username: cleanUsername,
+        password: cleanPassword,
+        rememberMe,
+      });
 
-      if (authResult.success) {
-        setIsLoading(false);
-        setAuthUser(authResult.user);
-        const origin = location.state?.from?.pathname || "/firms";
-        navigate(origin, { replace: true });
-      } else {
-        setIsLoading(false);
-        setError("Invalid username or password. Access restricted.");
-      }
-    }, 400);
+      // Redirect to original attempted page or default /firms
+      const origin = location.state?.from?.pathname || "/firms";
+      navigate(origin, { replace: true });
+    } catch (err) {
+      console.error("Login attempt failed:", err);
+      setError(
+        err?.message ||
+          "Invalid username or password. Access restricted to authorized personnel."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -132,7 +143,7 @@ const Login = () => {
                         setUsername(e.target.value);
                         setError("");
                       }}
-                      placeholder="Enter the username"
+                      placeholder="Enter username (e.g. admin or RSDXB)"
                       disabled={isLoading}
                       autoComplete="username"
                       className="w-full pl-9 pr-3 py-2.5 bg-[#FAFAF8] focus:bg-white border border-[#D1D1CB] focus:border-[#111111] focus:ring-1 focus:ring-[#111111] rounded-sm text-xs font-medium text-[#111111] placeholder-[#999999] outline-none transition-all"
@@ -158,7 +169,7 @@ const Login = () => {
                         setPassword(e.target.value);
                         setError("");
                       }}
-                      placeholder="Enter the password"
+                      placeholder="Enter password (e.g. admin123 or Royal@1504)"
                       disabled={isLoading}
                       autoComplete="current-password"
                       className="w-full pl-9 pr-10 py-2.5 bg-[#FAFAF8] focus:bg-white border border-[#D1D1CB] focus:border-[#111111] focus:ring-1 focus:ring-[#111111] rounded-sm text-xs font-medium text-[#111111] placeholder-[#999999] outline-none transition-all"

@@ -27,8 +27,8 @@ import {
     getAllFirms,
     formatCurrency,
     getAuthUser,
-    clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 
 const ENTRY_TYPES = [
@@ -236,6 +236,7 @@ const STORAGE_KEY = "royal_rays_signature_vouchers_v1";
 
 const Signature = () => {
     const navigate = useNavigate();
+    const { user: authUser, logout } = useAuth();
     const [currentUser, setCurrentUser] = useState(null);
     const [vouchers, setVouchers] = useState([]);
     const [activeTab, setActiveTab] = useState("vouchers"); // "vouchers" | "reports"
@@ -264,7 +265,7 @@ const Signature = () => {
     const [viewRecord, setViewRecord] = useState(null);
 
     useEffect(() => {
-        const user = getAuthUser();
+        const user = authUser || getAuthUser();
         if (!user) {
             setCurrentUser({ name: "RSDXB", username: "RSDXB" });
         } else {
@@ -284,7 +285,7 @@ const Signature = () => {
                 setVouchers(INITIAL_SIGNATURE_DATA);
             }
         }
-    }, []);
+    }, [authUser]);
 
     const saveVouchers = (updated) => {
         setVouchers(updated);
@@ -293,9 +294,9 @@ const Signature = () => {
         }
     };
 
-    const handleLogout = () => {
-        clearAuthUser();
-        navigate("/login");
+    const handleLogout = async () => {
+        await logout();
+        navigate("/login", { replace: true });
     };
 
     const showToast = (msg) => {

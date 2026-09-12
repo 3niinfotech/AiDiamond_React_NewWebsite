@@ -17,18 +17,19 @@ import {
   calculateFirmSummary,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 
 const FirmSelection = () => {
   const navigate = useNavigate();
+  const { user: authUser, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [firms, setFirms] = useState([]);
   const [firmStats, setFirmStats] = useState({});
 
   useEffect(() => {
-    const user = getAuthUser();
+    const user = authUser || getAuthUser();
     if (!user) {
       setCurrentUser({ name: "RSDXB", username: "RSDXB" });
     } else {
@@ -44,11 +45,11 @@ const FirmSelection = () => {
       statsObj[firm.id] = calculateFirmSummary(records);
     });
     setFirmStats(statsObj);
-  }, []);
+  }, [authUser]);
 
-  const handleLogout = () => {
-    clearAuthUser();
-    navigate("/login");
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   const filteredFirms = firms.filter(

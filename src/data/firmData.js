@@ -651,28 +651,37 @@ export const validateCredentials = (inputUsername, inputPassword) => {
 export const getAuthUser = () => {
   if (typeof window === "undefined") return null;
   try {
-    const data = localStorage.getItem(AUTH_KEY);
+    const data = localStorage.getItem("auth_user_data") || localStorage.getItem(AUTH_KEY);
     if (!data) return null;
     const parsed = JSON.parse(data);
-    if (parsed && parsed.username === "RSDXB" && parsed.token) {
-      return parsed;
-    }
-    return null;
+    return parsed || null;
   } catch (e) {
     return null;
   }
 };
 
 export const isAuthenticated = () => {
-  return getAuthUser() !== null;
+  if (typeof window === "undefined") return false;
+  const token = localStorage.getItem("auth_access_token");
+  const user = getAuthUser();
+  return Boolean(token || (user && user.token));
 };
 
 export const setAuthUser = (userObj) => {
   if (typeof window === "undefined") return;
   localStorage.setItem(AUTH_KEY, JSON.stringify(userObj));
+  localStorage.setItem("auth_user_data", JSON.stringify(userObj));
+  if (userObj?.token) {
+    localStorage.setItem("auth_access_token", userObj.token);
+  }
 };
 
 export const clearAuthUser = () => {
   if (typeof window === "undefined") return;
   localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem("auth_access_token");
+  localStorage.removeItem("auth_refresh_token");
+  localStorage.removeItem("auth_user_data");
+  window.dispatchEvent(new CustomEvent("auth:logout", { detail: { reason: "user_logout" } }));
 };
+

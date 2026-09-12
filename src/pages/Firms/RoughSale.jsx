@@ -18,8 +18,8 @@ import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
@@ -27,7 +27,8 @@ const config = VOUCHER_CONFIGS["rough-sale"];
 
 const RoughSale = () => {
   const navigate = useNavigate();
-  const currentUser = getAuthUser();
+  const { user: authUser, logout } = useAuth();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   // Master vouchers state
@@ -135,8 +136,8 @@ const RoughSale = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -223,33 +224,33 @@ const RoughSale = () => {
       const updated = allVouchers.map((item) =>
         item.id === editingVoucher.id
           ? {
-              ...item,
-              date: formData.date,
-              pDate: formData.date,
-              partyName: effectiveParty,
-              saleParty: effectiveParty,
-              customerParty: effectiveParty,
-              invoiceNo: formData.invoiceNo,
-              terms: formData.terms,
-              dueDate: formData.dueDate,
-              dueDays: formData.dueDays,
-              pcs: formData.pcs,
-              carat: formData.carats,
-              carats: parseFloat(formData.carats) || 0,
-              rate: parseFloat(formData.rate) || 0,
-              perCarat: formData.rate,
-              amount: amt,
-              totalAmountDollar: formData.amount,
-              aed: formData.aed,
-              remark: formData.remark,
-              note: formData.note,
-              kpcNo: formData.kpcNo,
-              dtDecDate: formData.dtDecDate,
-              dtDecDueDate: formData.dtDecDueDate,
-              dtDecNo: formData.dtDecNo,
-              dubaiFileDate: formData.dubaiFileDate,
-              itemDescription: formData.itemDescription,
-            }
+            ...item,
+            date: formData.date,
+            pDate: formData.date,
+            partyName: effectiveParty,
+            saleParty: effectiveParty,
+            customerParty: effectiveParty,
+            invoiceNo: formData.invoiceNo,
+            terms: formData.terms,
+            dueDate: formData.dueDate,
+            dueDays: formData.dueDays,
+            pcs: formData.pcs,
+            carat: formData.carats,
+            carats: parseFloat(formData.carats) || 0,
+            rate: parseFloat(formData.rate) || 0,
+            perCarat: formData.rate,
+            amount: amt,
+            totalAmountDollar: formData.amount,
+            aed: formData.aed,
+            remark: formData.remark,
+            note: formData.note,
+            kpcNo: formData.kpcNo,
+            dtDecDate: formData.dtDecDate,
+            dtDecDueDate: formData.dtDecDueDate,
+            dtDecNo: formData.dtDecNo,
+            dubaiFileDate: formData.dubaiFileDate,
+            itemDescription: formData.itemDescription,
+          }
           : item
       );
       saveVouchersToStorage(updated);
@@ -400,11 +401,10 @@ const RoughSale = () => {
               <button
                 key={v.id}
                 onClick={() => navigate(`/signature/${v.slug}`)}
-                className={`px-2.5 py-1 rounded-sm text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isActive
+                className={`px-2.5 py-1 rounded-sm text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${isActive
                     ? "bg-[#111111] text-white shadow-2xs"
                     : "bg-white text-[#444444] hover:bg-[#EBEBE6] border border-[#D1D1CB]"
-                }`}
+                  }`}
               >
                 <span
                   className="w-2 h-2 rounded-full"
@@ -565,9 +565,8 @@ const RoughSale = () => {
                     filteredEntries.map((v, idx) => (
                       <tr
                         key={v.id || idx}
-                        className={`hover:bg-[#F9F9F7] transition-colors ${
-                          idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
-                        }`}
+                        className={`hover:bg-[#F9F9F7] transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
+                          }`}
                       >
                         <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.date || v.pDate || "-"}
@@ -665,8 +664,11 @@ const RoughSale = () => {
               <div className="flex items-center gap-2">
                 <IconComponent style={{ color: config.color }} size={16} />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-[#111111]">
-                  {editingVoucher ? `Edit ${config.name}` : `Record New ${config.name}`}
+                  {editingVoucher ? `Edit ${config.name}` : `New ${config.name}`}
                 </h3>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
+                  CR
+                </span>
               </div>
               <button
                 onClick={() => {
@@ -681,15 +683,15 @@ const RoughSale = () => {
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
               <div className="space-y-3 max-h-[72vh] overflow-y-auto pr-1">
-                {/* Section 1: Sale & Invoice Details */}
+                {/* Section 1: Invoice & Party Details */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    1. Sale & Invoice Details
+                    1. INVOICE & PARTY DETAILS
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Date *
+                        DATE *
                       </label>
                       <input
                         type="date"
@@ -705,11 +707,11 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Invoice No
+                        INVOICE NO
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. RS-1048"
+                        placeholder="e.g. INV-1048"
                         value={formData.invoiceNo}
                         onChange={(e) => handleInputChange("invoiceNo", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -718,7 +720,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Terms (Days)
+                        TERMS (DAYS)
                       </label>
                       <input
                         type="text"
@@ -731,7 +733,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Due Date (Auto)
+                        DUE DATE (AUTO)
                       </label>
                       <input
                         type="date"
@@ -743,7 +745,7 @@ const RoughSale = () => {
 
                     <div className="sm:col-span-2">
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Party Name *
+                        PARTY NAME *
                       </label>
                       <select
                         value={formData.partyName}
@@ -776,31 +778,18 @@ const RoughSale = () => {
                         </div>
                       )}
                     </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        KP Number
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Kimberley Process #"
-                        value={formData.kpcNo}
-                        onChange={(e) => handleInputChange("kpcNo", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                      />
-                    </div>
                   </div>
                 </div>
 
                 {/* Section 2: Weight & Financial Figures */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    2. Weight & Financial Figures
+                    2. WEIGHT & FINANCIAL FIGURES
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Carat *
+                        CARAT *
                       </label>
                       <input
                         type="number"
@@ -818,7 +807,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Per Carat ($)
+                        PER CARAT
                       </label>
                       <input
                         type="number"
@@ -832,7 +821,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Total Amount $ *
+                        TOTAL AMOUNT *
                       </label>
                       <input
                         type="number"
@@ -864,15 +853,34 @@ const RoughSale = () => {
                   </div>
                 </div>
 
-                {/* Section 3: Dubai Trade Tracking */}
+                {/* Section 3: KP Number */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    3. Dubai Trade Tracking
+                    3. KP NUMBER
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      KP NUMBER
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter KP Certificate Number / Details..."
+                      value={formData.kpcNo}
+                      onChange={(e) => handleInputChange("kpcNo", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111] resize-y"
+                    />
+                  </div>
+                </div>
+
+                {/* Section 4: Dubai Trade Tracking */}
+                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                    4. DUBAI TRADE TRACKING
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec Date
+                        DT DEC DATE
                       </label>
                       <input
                         type="date"
@@ -884,7 +892,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec Due Date
+                        DT DEC DUE DATE
                       </label>
                       <input
                         type="date"
@@ -896,7 +904,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec No
+                        DT DEC NO
                       </label>
                       <input
                         type="text"
@@ -909,7 +917,7 @@ const RoughSale = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Dubai File Date
+                        DUBAI FILE DATE
                       </label>
                       <input
                         type="date"
@@ -918,25 +926,6 @@ const RoughSale = () => {
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
                       />
                     </div>
-                  </div>
-                </div>
-
-                {/* Section 4: Remarks */}
-                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
-                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    4. Remarks & Narration
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                      Remark
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Remark / Terms narration..."
-                      value={formData.remark}
-                      onChange={(e) => handleInputChange("remark", e.target.value)}
-                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                    />
                   </div>
                 </div>
               </div>
