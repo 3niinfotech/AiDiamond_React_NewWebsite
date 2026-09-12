@@ -262,7 +262,7 @@ const FirmSelection = () => {
                     <div className="flex justify-between pt-1 border-t border-[#E8E8E4]">
                       <span className="text-[#777777]">Net Bal:</span>
                       <span className="font-semibold text-[#111111]">
-                        {formatCurrency(stats.netBalance)}
+                        {formatCurrency(Math.abs(stats.netBalance))}
                       </span>
                     </div>
                   </div>

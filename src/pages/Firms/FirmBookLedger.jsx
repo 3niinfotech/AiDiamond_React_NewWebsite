@@ -485,12 +485,8 @@ const FirmBookLedger = () => {
               <div className="text-[10px] uppercase font-bold tracking-wider text-[#111111]">
                 Net Balance (Bal)
               </div>
-              <div
-                className={`text-lg font-bold font-mono leading-tight ${
-                  summary.netBalance >= 0 ? "text-[#111111]" : "text-[#DC2626]"
-                }`}
-              >
-                {formatCurrency(summary.netBalance)}
+              <div className="text-lg font-bold font-mono leading-tight text-[#111111]">
+                {formatCurrency(Math.abs(summary.netBalance))}
               </div>
               <div className="text-[10px] text-[#777777]">
                 {summary.totalAed > 0 ? formatCurrency(summary.totalAed, "AED") : "Active Ledger Balance"}
@@ -920,13 +916,9 @@ const FirmBookLedger = () => {
                             </td>
 
                             {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
-                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs">
-                              <span
-                                className={
-                                  (row.runningBal || row.bal || 0) >= 0 ? "text-[#111111]" : "text-[#DC2626]"
-                                }
-                              >
-                                {formatCurrency(row.runningBal || row.bal || 0)}
+                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs text-[#111111]">
+                              <span>
+                                {formatCurrency(Math.abs(row.runningBal || row.bal || 0))}
                               </span>
                             </td>
 
@@ -1277,7 +1269,7 @@ const FirmBookLedger = () => {
                       <input
                         type="text"
                         readOnly
-                        value={formatCurrency(selectedRecord.runningBal || selectedRecord.bal || 0)}
+                        value={formatCurrency(Math.abs(selectedRecord.runningBal || selectedRecord.bal || 0))}
                         className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
                       />
                     </div>
