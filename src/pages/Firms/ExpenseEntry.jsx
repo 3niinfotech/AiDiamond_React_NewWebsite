@@ -18,8 +18,8 @@ import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
@@ -27,7 +27,8 @@ const config = VOUCHER_CONFIGS["expense"];
 
 const ExpenseEntry = () => {
   const navigate = useNavigate();
-  const currentUser = getAuthUser();
+  const { user: authUser, logout } = useAuth();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   // Master vouchers state
@@ -113,8 +114,8 @@ const ExpenseEntry = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -454,26 +455,17 @@ const ExpenseEntry = () => {
                     <th className="py-2.5 px-3">Company Name</th>
                     <th className="py-2.5 px-3">Description</th>
                     <th className="py-2.5 px-3">Ref Document No</th>
-                    <th className="py-2.5 px-3 text-right">Office Expense</th>
-                    <th className="py-2.5 px-3 text-right">Shipping & Logistics</th>
-                    <th className="py-2.5 px-3 text-right">Professional Fees</th>
-                    <th className="py-2.5 px-3 text-right">Shipping / Freight</th>
-                    <th className="py-2.5 px-3 text-right">Government & Authority Fees</th>
-                    <th className="py-2.5 px-3 text-right">Software & IT</th>
-                    <th className="py-2.5 px-3 text-right">Bank & Finance</th>
-                    <th className="py-2.5 px-3 text-right">Employee / Staff</th>
-                    <th className="py-2.5 px-3 text-right">Insurance</th>
-                    <th className="py-2.5 px-3 text-right">Other</th>
+                    <th className="py-2.5 px-3">Service Type</th>
                     <th className="py-2.5 px-3 text-right">AED</th>
                     <th className="py-2.5 px-3 text-right">Amount $</th>
-                    <th className="py-2.5 px-3">Remark</th>
+                    <th className="py-2.5 px-3">REMARK</th>
                     <th className="py-2.5 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EAEAEA]">
                   {filteredEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={19} className="py-12 text-center text-[#777777]">
+                      <td colSpan={10} className="py-12 text-center text-[#777777]">
                         <IconComponent
                           className="mx-auto mb-2 text-[#CCCCCC]"
                           size={28}
@@ -482,7 +474,7 @@ const ExpenseEntry = () => {
                           No {config.name} entries found
                         </p>
                         <p className="text-xs text-[#888888] mt-0.5">
-                          Use the form on the left to record your first entry.
+                          Use the form to record your first entry.
                         </p>
                       </td>
                     </tr>
@@ -509,35 +501,8 @@ const ExpenseEntry = () => {
                         <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.refDocumentNo || v.jobNo || v.saleInvoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.officeExpense ? (Number(v.officeExpense) ? formatCurrency(v.officeExpense) : v.officeExpense) : (v.expenseType === "Office Expense" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.shippingLogistics ? (Number(v.shippingLogistics) ? formatCurrency(v.shippingLogistics) : v.shippingLogistics) : (v.expenseType === "Shipping & Logistics" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.professionalFees ? (Number(v.professionalFees) ? formatCurrency(v.professionalFees) : v.professionalFees) : (v.expenseType === "Professional Fees" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.shippingFreight ? (Number(v.shippingFreight) ? formatCurrency(v.shippingFreight) : v.shippingFreight) : (v.expenseType === "Shipping / Freight" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.governmentFees ? (Number(v.governmentFees) ? formatCurrency(v.governmentFees) : v.governmentFees) : (v.expenseType === "Government & Authority Fees" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.softwareIt ? (Number(v.softwareIt) ? formatCurrency(v.softwareIt) : v.softwareIt) : (v.expenseType === "Software & IT" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.bankFinance ? (Number(v.bankFinance) ? formatCurrency(v.bankFinance) : v.bankFinance) : (v.expenseType === "Bank & Finance" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.employeeStaff ? (Number(v.employeeStaff) ? formatCurrency(v.employeeStaff) : v.employeeStaff) : (v.expenseType === "Employee / Staff" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.insurance ? (Number(v.insurance) ? formatCurrency(v.insurance) : v.insurance) : (v.expenseType === "Insurance" && v.amount ? formatCurrency(v.amount) : "-")}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
-                          {v.otherExpense ? (Number(v.otherExpense) ? formatCurrency(v.otherExpense) : v.otherExpense) : (v.expenseType === "Other" && v.amount ? formatCurrency(v.amount) : "-")}
+                        <td className="py-2 px-3 whitespace-nowrap text-[#555555]">
+                          {v.serviceType || v.expenseType || v.expenseHead || "-"}
                         </td>
                         <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.aed || "-"}

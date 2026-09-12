@@ -13,20 +13,22 @@ import {
   FaTrash,
   FaEye,
   FaEdit,
+  FaPrint,
 } from "react-icons/fa";
 import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
 const PaymentReceivePage = () => {
   const navigate = useNavigate();
+  const { user: authUser, logout } = useAuth();
   const voucherConfig = VOUCHER_CONFIGS["payment-receive"];
-  const currentUser = getAuthUser();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   const [allVouchers, setAllVouchers] = useState(() => {
@@ -44,12 +46,16 @@ const PaymentReceivePage = () => {
 
   const getInitialFormData = () => ({
     pDate: new Date().toISOString().split("T")[0],
-    type: "Against Invoice",
     partyName: "",
     customParty: "",
     amount: "",
     paymentMode: "Bank Transfer",
     againstInvoice: "",
+    aed: "",
+    dpmsrNo: "",
+    reportDate: "",
+    dpmsrDueDate: "",
+    daysLeft: "",
     remark: "",
   });
 
@@ -76,17 +82,35 @@ const PaymentReceivePage = () => {
     }
   };
 
+  const getDaysLeft = (v) => {
+    if (v.daysLeft !== undefined && v.daysLeft !== "" && v.daysLeft !== null) {
+      return v.daysLeft;
+    }
+    if (!v.dpmsrDueDate) return "-";
+    const due = new Date(v.dpmsrDueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return isNaN(diffDays) ? "-" : diffDays;
+  };
+
   const handleOpenEdit = (v) => {
     setEditingVoucher(v);
     const isStandardParty = allAvailableParties.some((p) => p.name === v.partyName);
     setFormData({
       pDate: v.pDate || v.date || new Date().toISOString().split("T")[0],
-      type: v.type || "Against Invoice",
       partyName: isStandardParty ? v.partyName : "__custom__",
       customParty: isStandardParty ? "" : (v.partyName || ""),
       amount: v.amount ? String(v.amount) : "",
       paymentMode: v.paymentMode || "Bank Transfer",
       againstInvoice: v.againstInvoice || v.invoiceNo || "",
+      aed: v.aed ? String(v.aed) : "",
+      dpmsrNo: v.dpmsrNo || "",
+      reportDate: v.reportDate || "",
+      dpmsrDueDate: v.dpmsrDueDate || "",
+      daysLeft: v.daysLeft !== undefined && v.daysLeft !== null ? String(v.daysLeft) : "",
       remark: v.remark || "",
     });
     setFormErrors({});
@@ -101,13 +125,83 @@ const PaymentReceivePage = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
   const handleInputChange = (field, val) => {
-    setFormData((prev) => ({ ...prev, [field]: val }));
+    const updated = { ...formData, [field]: val };
+    if (field === "dpmsrDueDate") {
+      if (val) {
+        const due = new Date(val);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        due.setHours(0, 0, 0, 0);
+        const diffTime = due.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        updated.daysLeft = isNaN(diffDays) ? "" : String(diffDays);
+      } else {
+        updated.daysLeft = "";
+      }
+    }
+    setFormData(updated);
+  };
+
+  const handlePrintDpmsr = (v) => {
+    const printWindow = window.open("", "_blank");
+    const content = `
+      <html>
+        <head>
+          <title>DPMSR Print - ${v.dpmsrNo || v.partyName || "Receipt"}</title>
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #111; }
+            .header { border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .title { font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+            .badge { background: #f0f0f0; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            th, td { border: 1px solid #ddd; padding: 9px 12px; text-align: left; font-size: 12px; }
+            th { background: #f8f8f8; font-weight: 600; width: 35%; }
+            .footer { margin-top: 40px; display: flex; justify-content: space-between; padding-top: 20px; border-top: 1px dashed #ccc; font-size: 11px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="title">ROYAL RAYS — PAYMENT RECEIVE ENTRY</div>
+              <div style="font-size: 12px; color: #555; margin-top: 4px;">DPMSR Official Transaction Record</div>
+            </div>
+            <div class="badge">${v.dpmsrNo ? "DPMSR #" + v.dpmsrNo : "OFFICIAL VOUCHER"}</div>
+          </div>
+          <table>
+            <tr><th>P.Date</th><td>${v.pDate || v.date || "-"}</td></tr>
+            <tr><th>Party Name</th><td><strong>${v.partyName || "-"}</strong></td></tr>
+            <tr><th>Received Amount</th><td><strong>$${Number(v.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td></tr>
+            <tr><th>Payment Mode</th><td>${v.paymentMode || "Bank Transfer"}</td></tr>
+            <tr><th>Against Invoice</th><td>${v.againstInvoice || v.invoiceNo || "-"}</td></tr>
+            <tr><th>AED</th><td>${v.aed ? "AED " + Number(v.aed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-"}</td></tr>
+            <tr><th>DPMSR No</th><td>${v.dpmsrNo || "-"}</td></tr>
+            <tr><th>Report Date</th><td>${v.reportDate || "-"}</td></tr>
+            <tr><th>DPMSR Due Date</th><td>${v.dpmsrDueDate || "-"}</td></tr>
+            <tr><th>Days Left</th><td>${getDaysLeft(v)}</td></tr>
+            <tr><th>Remarks / Reference</th><td>${v.remark || "-"}</td></tr>
+          </table>
+          <div class="footer">
+            <div>Generated on: ${new Date().toLocaleString()}</div>
+            <div>Authorized Signatory: ____________________</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `;
+    if (printWindow) {
+      printWindow.document.write(content);
+      printWindow.document.close();
+    } else {
+      window.print();
+    }
   };
 
   const handleFormSubmit = (e) => {
@@ -129,7 +223,7 @@ const PaymentReceivePage = () => {
 
     const amt = parseFloat(formData.amount);
     if (isNaN(amt) || amt <= 0) {
-      errors.amount = "Valid amount is required";
+      errors.amount = "Valid Received Amount is required";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -144,7 +238,6 @@ const PaymentReceivePage = () => {
               ...item,
               date: formData.pDate,
               pDate: formData.pDate,
-              type: formData.type || "Against Invoice",
               partyName: effectiveParty,
               purchaseParty: effectiveParty,
               invoiceNo: formData.againstInvoice,
@@ -152,6 +245,11 @@ const PaymentReceivePage = () => {
               amount: amt,
               totalAmountDollar: formData.amount,
               paymentMode: formData.paymentMode,
+              aed: formData.aed ? parseFloat(formData.aed) : null,
+              dpmsrNo: formData.dpmsrNo,
+              reportDate: formData.reportDate,
+              dpmsrDueDate: formData.dpmsrDueDate,
+              daysLeft: formData.daysLeft,
               remark: formData.remark,
             }
           : item
@@ -169,7 +267,6 @@ const PaymentReceivePage = () => {
       id: "sig-" + Date.now(),
       date: formData.pDate,
       pDate: formData.pDate,
-      type: formData.type || "Against Invoice",
       entryType: voucherConfig.name,
       partyName: effectiveParty,
       purchaseParty: effectiveParty,
@@ -178,6 +275,11 @@ const PaymentReceivePage = () => {
       amount: amt,
       totalAmountDollar: formData.amount,
       paymentMode: formData.paymentMode,
+      aed: formData.aed ? parseFloat(formData.aed) : null,
+      dpmsrNo: formData.dpmsrNo,
+      reportDate: formData.reportDate,
+      dpmsrDueDate: formData.dpmsrDueDate,
+      daysLeft: formData.daysLeft,
       remark: formData.remark,
       crDr: voucherConfig.crDr,
       createdAt: new Date().toISOString(),
@@ -199,7 +301,9 @@ const PaymentReceivePage = () => {
         (v.partyName && v.partyName.toLowerCase().includes(term)) ||
         (v.againstInvoice && v.againstInvoice.toLowerCase().includes(term)) ||
         (v.invoiceNo && v.invoiceNo.toLowerCase().includes(term)) ||
-        (v.type && v.type.toLowerCase().includes(term)) ||
+        (v.dpmsrNo && v.dpmsrNo.toLowerCase().includes(term)) ||
+        (v.reportDate && v.reportDate.toLowerCase().includes(term)) ||
+        (v.dpmsrDueDate && v.dpmsrDueDate.toLowerCase().includes(term)) ||
         (v.paymentMode && v.paymentMode.toLowerCase().includes(term)) ||
         (v.remark && v.remark.toLowerCase().includes(term)) ||
         (v.pDate && v.pDate.includes(term)) ||
@@ -214,28 +318,34 @@ const PaymentReceivePage = () => {
   }, [typeVouchers]);
 
   const handleExportCSV = () => {
-    const dataToExport = filteredVouchers.map((v, idx) => ({
-      "Sr No": idx + 1,
+    const dataToExport = filteredVouchers.map((v) => ({
       "P.Date": v.pDate || v.date || "-",
-      "Type": v.type || "Against Invoice",
       "Party Name": v.partyName || "-",
-      "Amount ($)": v.amount || 0,
+      "Received Amount ($)": v.amount || 0,
       "Payment Mode": v.paymentMode || "Bank Transfer",
       "Against Invoice": v.againstInvoice || v.invoiceNo || "-",
+      "AED": v.aed || 0,
+      "DPMSR No": v.dpmsrNo || "-",
+      "Report Date": v.reportDate || "-",
+      "DPMSR Due Date": v.dpmsrDueDate || "-",
+      "Days Left": getDaysLeft(v),
       "Remarks": v.remark || "-",
     }));
     exportToCSV(dataToExport, `${voucherConfig.slug}_entries_${new Date().toISOString().split("T")[0]}`);
   };
 
   const handleExportExcel = () => {
-    const dataToExport = filteredVouchers.map((v, idx) => ({
-      "Sr No": idx + 1,
+    const dataToExport = filteredVouchers.map((v) => ({
       "P.Date": v.pDate || v.date || "-",
-      "Type": v.type || "Against Invoice",
       "Party Name": v.partyName || "-",
-      "Amount ($)": v.amount || 0,
+      "Received Amount ($)": v.amount || 0,
       "Payment Mode": v.paymentMode || "Bank Transfer",
       "Against Invoice": v.againstInvoice || v.invoiceNo || "-",
+      "AED": v.aed || 0,
+      "DPMSR No": v.dpmsrNo || "-",
+      "Report Date": v.reportDate || "-",
+      "DPMSR Due Date": v.dpmsrDueDate || "-",
+      "Days Left": getDaysLeft(v),
       "Remarks": v.remark || "-",
     }));
     exportToExcel(dataToExport, `${voucherConfig.slug}_entries_${new Date().toISOString().split("T")[0]}`);
@@ -322,7 +432,7 @@ const PaymentReceivePage = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E0E0DB]">
             <div className="px-3 py-1">
               <div className="text-[10px] uppercase font-bold tracking-wider text-[#777777]">
-                Total Payment Receive Amount
+                Total Received Amount
               </div>
               <div
                 className="text-lg font-bold font-mono leading-tight mt-0.5"
@@ -348,9 +458,9 @@ const PaymentReceivePage = () => {
                 Default Impact
               </div>
               <div className="text-lg font-bold text-[#333333] font-mono leading-tight mt-0.5">
-                Receive
+                Receipt
               </div>
-              <div className="text-[10px] text-[#888888]">Customer / Buyer Settlement</div>
+              <div className="text-[10px] text-[#888888]">Customer Payment Settlement</div>
             </div>
 
             <div className="px-3 py-1">
@@ -375,7 +485,7 @@ const PaymentReceivePage = () => {
               />
               <input
                 type="text"
-                placeholder="Search by party, against invoice, type, mode..."
+                placeholder="Search by party, against invoice, DPMSR no..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -427,40 +537,36 @@ const PaymentReceivePage = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-2.5 px-3 whitespace-nowrap text-center">Sr No</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">P.Date</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Type</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Party Name</th>
-                  <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Payment Mode</th>
-                  <th className="py-2.5 px-3 whitespace-nowrap">Against Invoice</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
+                <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">
+                  <th className="py-2.5 px-3">P.Date</th>
+                  <th className="py-2.5 px-3">Party Name</th>
+                  <th className="py-2.5 px-3 text-right">Received Amount</th>
+                  <th className="py-2.5 px-3 text-center">Payment Mode</th>
+                  <th className="py-2.5 px-3">Against Invoice</th>
+                  <th className="py-2.5 px-3 text-right">AED</th>
+                  <th className="py-2.5 px-3">DPMSR No</th>
+                  <th className="py-2.5 px-3">Report Date</th>
+                  <th className="py-2.5 px-3">DPMSR Due Date</th>
+                  <th className="py-2.5 px-3 text-center">Days Left</th>
+                  <th className="py-2.5 px-3 text-center">DPMSR Print</th>
+                  <th className="py-2.5 px-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAEA]">
                 {filteredVouchers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-10 text-xs text-[#888888]">
+                    <td colSpan={12} className="text-center py-10 text-xs text-[#888888]">
                       No {voucherConfig.name} vouchers found. Click "Add Payment Receive" to create one.
                     </td>
                   </tr>
                 ) : (
                   filteredVouchers.map((v, idx) => (
-                    <tr key={v.id} className="hover:bg-[#F9F9F7] transition-colors">
-                      <td className="py-2 px-3 font-mono text-[11px] text-center text-[#666666]">
-                        {idx + 1}
-                      </td>
+                    <tr key={v.id || idx} className="hover:bg-[#F9F9F7] transition-colors">
                       <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#444444]">
                         {v.pDate || v.date || "-"}
                       </td>
-                      <td className="py-2 px-3 whitespace-nowrap text-[#333333]">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#EBF5FF] text-[#0066CC] border border-[#BFDBFE]">
-                          {v.type || "Against Invoice"}
-                        </span>
-                      </td>
-                      <td className="py-2 px-3 font-semibold text-[#111111]">
-                        {v.partyName}
+                      <td className="py-2 px-3 font-semibold text-[#111111] whitespace-nowrap">
+                        {v.partyName || "-"}
                       </td>
                       <td
                         className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap"
@@ -475,6 +581,48 @@ const PaymentReceivePage = () => {
                       </td>
                       <td className="py-2 px-3 font-mono text-[11px] text-[#444444] whitespace-nowrap">
                         {v.againstInvoice || v.invoiceNo || "-"}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
+                        {v.aed ? `AED ${Number(v.aed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#444444] whitespace-nowrap">
+                        {v.dpmsrNo || "-"}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#555555] whitespace-nowrap">
+                        {v.reportDate || "-"}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#555555] whitespace-nowrap">
+                        {v.dpmsrDueDate || "-"}
+                      </td>
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                        {(() => {
+                          const dl = getDaysLeft(v);
+                          if (dl === "-") return <span className="text-[#888888]">-</span>;
+                          const n = Number(dl);
+                          if (n < 0) {
+                            return (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#FEF2F2] text-[#991B1B] border border-[#FCA5A5]">
+                                {Math.abs(n)}d overdue
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+                              {n} Days
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handlePrintDpmsr(v)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-[#F5F5F2] hover:bg-[#111111] hover:text-white border border-[#D1D1CB] text-[11px] font-semibold text-[#333333] transition-colors cursor-pointer"
+                          title="Print DPMSR Report"
+                        >
+                          <FaPrint size={10} />
+                          <span>Print</span>
+                        </button>
                       </td>
                       <td className="py-2 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
@@ -513,7 +661,7 @@ const PaymentReceivePage = () => {
       {/* Standalone Add/Edit Payment Receive Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-md w-full p-5 shadow-2xl animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-2xl w-full p-5 shadow-2xl animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E0E0DB] pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <FaArrowUp style={{ color: voucherConfig.color }} size={16} />
@@ -532,143 +680,210 @@ const PaymentReceivePage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                    P.Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.pDate}
-                    onChange={(e) => handleInputChange("pDate", e.target.value)}
-                    className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                    required
-                  />
-                  {formErrors.pDate && (
-                    <p className="text-[10px] text-red-600 mt-0.5">{formErrors.pDate}</p>
-                  )}
+            <form onSubmit={handleFormSubmit} className="space-y-3.5 text-xs">
+              {/* Section 1: Basic Voucher Details */}
+              <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                  1. Basic Voucher Details
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      P.Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.pDate}
+                      onChange={(e) => handleInputChange("pDate", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      required
+                    />
+                    {formErrors.pDate && (
+                      <p className="text-[10px] text-red-600 mt-0.5">{formErrors.pDate}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                    Type
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => handleInputChange("type", e.target.value)}
-                    className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                  >
-                    <option value="Against Invoice">Against Invoice</option>
-                    <option value="Advance Payment">Advance Payment</option>
-                    <option value="On Account">On Account</option>
-                    <option value="Final Settlement">Final Settlement</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Party Name *
+                    </label>
+                    <select
+                      value={formData.partyName}
+                      onChange={(e) => handleInputChange("partyName", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      required
+                    >
+                      <option value="">-- Select Party --</option>
+                      {allAvailableParties.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Enter Custom Party Name</option>
+                    </select>
+                    {formErrors.partyName && (
+                      <p className="text-[10px] text-red-600 mt-0.5">{formErrors.partyName}</p>
+                    )}
+
+                    {formData.partyName === "__custom__" && (
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          placeholder="Type Custom Party Name..."
+                          value={formData.customParty}
+                          onChange={(e) => handleInputChange("customParty", e.target.value)}
+                          className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                          autoFocus
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Party Name */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                  Party Name *
-                </label>
-                <select
-                  value={formData.partyName}
-                  onChange={(e) => handleInputChange("partyName", e.target.value)}
-                  className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                  required
-                >
-                  <option value="">-- Select Party --</option>
-                  {allAvailableParties.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                  <option value="__custom__">+ Enter Custom Party Name</option>
-                </select>
-                {formErrors.partyName && (
-                  <p className="text-[10px] text-red-600 mt-0.5">{formErrors.partyName}</p>
-                )}
+              {/* Section 2: Financial & Payment Figures */}
+              <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                  2. Financial & Payment Figures
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Received Amount ($) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.amount}
+                      onChange={(e) => handleInputChange("amount", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono font-bold focus:outline-hidden focus:border-[#111111]"
+                      required
+                    />
+                    {formErrors.amount && (
+                      <p className="text-[10px] text-red-600 mt-0.5">{formErrors.amount}</p>
+                    )}
+                  </div>
 
-                {formData.partyName === "__custom__" && (
-                  <div className="mt-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Payment Mode
+                    </label>
+                    <select
+                      value={formData.paymentMode}
+                      onChange={(e) => handleInputChange("paymentMode", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                    >
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Dubai Wire">Dubai Wire</option>
+                      <option value="Angadia">Angadia</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Against Invoice
+                    </label>
                     <input
                       type="text"
-                      placeholder="Type Custom Party Name..."
-                      value={formData.customParty}
-                      onChange={(e) => handleInputChange("customParty", e.target.value)}
-                      className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                      autoFocus
+                      placeholder="e.g. INV-1048 / LOT-A"
+                      value={formData.againstInvoice}
+                      onChange={(e) => handleInputChange("againstInvoice", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
                     />
                   </div>
-                )}
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      AED
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData.aed}
+                      onChange={(e) => handleInputChange("aed", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono font-bold focus:outline-hidden focus:border-[#111111]"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Amount */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                  Amount *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="0"
-                  value={formData.amount}
-                  onChange={(e) => handleInputChange("amount", e.target.value)}
-                  className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono font-bold focus:outline-hidden focus:border-[#111111]"
-                  required
-                />
-                {formErrors.amount && (
-                  <p className="text-[10px] text-red-600 mt-0.5">{formErrors.amount}</p>
-                )}
+              {/* Section 3: DPMSR & Compliance Tracking */}
+              <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                  3. DPMSR & Compliance Tracking
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      DPMSR No
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. DP-88912"
+                      value={formData.dpmsrNo}
+                      onChange={(e) => handleInputChange("dpmsrNo", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Report Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.reportDate}
+                      onChange={(e) => handleInputChange("reportDate", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      DPMSR Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.dpmsrDueDate}
+                      onChange={(e) => handleInputChange("dpmsrDueDate", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      Days Left (Auto)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Auto / enter days"
+                      value={formData.daysLeft}
+                      onChange={(e) => handleInputChange("daysLeft", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono focus:outline-hidden focus:border-[#111111]"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Payment Mode */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                  Payment Mode
-                </label>
-                <select
-                  value={formData.paymentMode}
-                  onChange={(e) => handleInputChange("paymentMode", e.target.value)}
-                  className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                >
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Dubai Wire">Dubai Wire</option>
-                  <option value="Angadia">Angadia</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              {/* Against Invoice */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                  Against Invoice
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. INV-1048 / LOT-A"
-                  value={formData.againstInvoice}
-                  onChange={(e) => handleInputChange("againstInvoice", e.target.value)}
-                  className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                />
-              </div>
-
-              {/* Remarks */}
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                  Remarks / Narration
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Enter transaction notes, receipt reference..."
-                  value={formData.remark}
-                  onChange={(e) => handleInputChange("remark", e.target.value)}
-                  className="w-full bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111] resize-none"
-                />
+              {/* Section 4: Remarks & Reference */}
+              <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                  4. Remarks & Reference
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Enter transaction notes, receipt reference..."
+                    value={formData.remark}
+                    onChange={(e) => handleInputChange("remark", e.target.value)}
+                    className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                  />
+                </div>
               </div>
 
               {/* Action Buttons */}
@@ -726,7 +941,7 @@ const PaymentReceivePage = () => {
               <div className="bg-[#FAFAF8] border border-[#E8E8E4] p-3 rounded space-y-1.5 font-mono text-[11px]">
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Date:</span>
-                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.date}</span>
+                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.date || deleteVoucherTarget.pDate}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Party:</span>
@@ -734,7 +949,7 @@ const PaymentReceivePage = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Amount:</span>
-                  <span className="font-bold text-blue-600">
+                  <span className="font-bold text-red-600">
                     {formatCurrency(deleteVoucherTarget.amount)}
                   </span>
                 </div>
@@ -792,8 +1007,8 @@ const PaymentReceivePage = () => {
                   <p className="font-mono font-semibold">{selectedVoucher.pDate || selectedVoucher.date}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Type</span>
-                  <p className="font-semibold text-[#0066CC]">{selectedVoucher.type || "Against Invoice"}</p>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">Payment Mode</span>
+                  <p className="font-semibold text-[#333333]">{selectedVoucher.paymentMode || "Bank Transfer"}</p>
                 </div>
               </div>
 
@@ -804,7 +1019,7 @@ const PaymentReceivePage = () => {
 
               <div className="grid grid-cols-2 gap-2 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Amount</span>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">Received Amount</span>
                   <p
                     className="font-mono font-bold text-base"
                     style={{ color: voucherConfig.color }}
@@ -813,21 +1028,42 @@ const PaymentReceivePage = () => {
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Payment Mode</span>
-                  <p className="font-semibold text-[#333333]">
-                    {selectedVoucher.paymentMode || "Bank Transfer"}
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">AED</span>
+                  <p className="font-mono font-bold text-sm text-[#111111]">
+                    {selectedVoucher.aed ? `AED ${Number(selectedVoucher.aed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
                   </p>
                 </div>
               </div>
 
-              {selectedVoucher.againstInvoice && (
+              <div className="grid grid-cols-2 gap-2 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#777777]">Against Invoice</span>
-                  <p className="font-mono font-semibold text-[#111111] bg-[#F9F9F7] px-2 py-1 rounded border border-[#EAEAEA]">
-                    {selectedVoucher.againstInvoice}
+                  <p className="font-mono font-semibold text-[#111111]">
+                    {selectedVoucher.againstInvoice || selectedVoucher.invoiceNo || "-"}
                   </p>
                 </div>
-              )}
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">DPMSR No</span>
+                  <p className="font-mono font-semibold text-[#111111]">
+                    {selectedVoucher.dpmsrNo || "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">Report Date</span>
+                  <p className="font-mono font-semibold">{selectedVoucher.reportDate || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">DPMSR Due Date</span>
+                  <p className="font-mono font-semibold">{selectedVoucher.dpmsrDueDate || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#777777]">Days Left</span>
+                  <p className="font-mono font-semibold">{getDaysLeft(selectedVoucher)}</p>
+                </div>
+              </div>
 
               {selectedVoucher.remark && (
                 <div>
@@ -839,7 +1075,16 @@ const PaymentReceivePage = () => {
               )}
             </div>
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex items-center justify-between border-t border-[#E0E0DB] pt-3">
+              <button
+                type="button"
+                onClick={() => handlePrintDpmsr(selectedVoucher)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#111111] hover:text-white border border-[#D1D1CB] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <FaPrint size={11} />
+                <span>Print DPMSR</span>
+              </button>
+
               <button
                 onClick={() => setSelectedVoucher(null)}
                 className="px-4 py-1.5 rounded-sm bg-[#111111] text-white text-xs font-semibold uppercase tracking-wider cursor-pointer hover:bg-black"

@@ -18,8 +18,8 @@ import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
@@ -27,7 +27,8 @@ const config = VOUCHER_CONFIGS["rough-purchase"];
 
 const RoughPurchase = () => {
   const navigate = useNavigate();
-  const currentUser = getAuthUser();
+  const { user: authUser, logout } = useAuth();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   // Master vouchers state
@@ -149,8 +150,8 @@ const RoughPurchase = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -891,19 +892,6 @@ const RoughPurchase = () => {
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
                       />
                     </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        KPC No
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="KP Certificate #"
-                        value={formData.kpcNo}
-                        onChange={(e) => handleInputChange("kpcNo", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                      />
-                    </div>
                   </div>
                 </div>
 
@@ -928,7 +916,7 @@ const RoughPurchase = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Carat (Ct) *
+                        Carat *
                       </label>
                       <input
                         type="number"
@@ -946,7 +934,7 @@ const RoughPurchase = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Per Carat ($)
+                        Per Carat
                       </label>
                       <input
                         type="number"
@@ -1004,7 +992,7 @@ const RoughPurchase = () => {
                       </label>
                       <input
                         type="text"
-                        placeholder="Linked Sale INV #"
+                        placeholder="Sale Invoice #"
                         value={formData.saleInvoiceNo}
                         onChange={(e) => handleInputChange("saleInvoiceNo", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -1018,7 +1006,7 @@ const RoughPurchase = () => {
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="Sold Carat"
+                        placeholder="0.00"
                         value={formData.saleCarat}
                         onChange={(e) => handleInputChange("saleCarat", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono focus:outline-hidden focus:border-[#111111]"
@@ -1027,12 +1015,12 @@ const RoughPurchase = () => {
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Balance CT (Auto)
+                        Balance CT
                       </label>
                       <input
                         type="number"
                         step="0.01"
-                        placeholder="Remaining"
+                        placeholder="0.00"
                         value={formData.balanceCt}
                         disabled
                         className="w-full bg-[#F5F5F2] text-[#555555] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs font-mono font-semibold cursor-not-allowed focus:outline-hidden"
@@ -1041,10 +1029,29 @@ const RoughPurchase = () => {
                   </div>
                 </div>
 
-                {/* Section 4: Dubai Trade Tracking */}
+                {/* Section 4: KPC NO */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    4. Dubai Trade Tracking
+                    4. KPC NO
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                      KPC NO
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter KPC Certificate No / Details..."
+                      value={formData.kpcNo}
+                      onChange={(e) => handleInputChange("kpcNo", e.target.value)}
+                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111] resize-y"
+                    />
+                  </div>
+                </div>
+
+                {/* Section 5: Dubai Trade Tracking */}
+                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                    5. Dubai Trade Tracking
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
@@ -1102,7 +1109,7 @@ const RoughPurchase = () => {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Cleared / In Process"
+                        placeholder="In Process"
                         value={formData.dubaiTradeStatus}
                         onChange={(e) => handleInputChange("dubaiTradeStatus", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -1111,10 +1118,10 @@ const RoughPurchase = () => {
                   </div>
                 </div>
 
-                {/* Section 5: Remarks & Notes */}
+                {/* Section 6: Remarks & Notes */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    5. Remarks & Notes
+                    6. Remarks & Notes
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>

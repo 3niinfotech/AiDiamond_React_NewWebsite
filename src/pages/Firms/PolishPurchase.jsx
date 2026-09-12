@@ -18,8 +18,8 @@ import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
@@ -27,7 +27,8 @@ const config = VOUCHER_CONFIGS["polish-purchase"];
 
 const PolishPurchase = () => {
   const navigate = useNavigate();
-  const currentUser = getAuthUser();
+  const { user: authUser, logout } = useAuth();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   // Master vouchers state
@@ -63,6 +64,9 @@ const PolishPurchase = () => {
     aed: "",
     remark: "",
     note: "",
+    saleInvoiceNo: "",
+    saleCarat: "",
+    balanceCt: "",
     broker: "",
     dtDecDate: "",
     dtDecDueDate: "",
@@ -120,6 +124,9 @@ const PolishPurchase = () => {
       aed: v.aed || "",
       remark: v.remark || "",
       note: v.note || "",
+      saleInvoiceNo: v.saleInvoiceNo || "",
+      saleCarat: v.saleCarat ? String(v.saleCarat) : "",
+      balanceCt: v.balanceCt ? String(v.balanceCt) : "",
       broker: v.broker || "",
       dtDecDate: v.dtDecDate || "",
       dtDecDueDate: v.dtDecDueDate || "",
@@ -141,8 +148,8 @@ const PolishPurchase = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -156,6 +163,15 @@ const PolishPurchase = () => {
       const r = parseFloat(field === "rate" ? val : formData.rate);
       if (!isNaN(c) && !isNaN(r) && c > 0 && r > 0) {
         updated.amount = Math.round(c * r * 100) / 100;
+      }
+    }
+
+    // Auto calculate balance CT when carats or saleCarat change
+    if (field === "carats" || field === "saleCarat") {
+      const totalC = parseFloat(field === "carats" ? val : formData.carats) || 0;
+      const soldC = parseFloat(field === "saleCarat" ? val : formData.saleCarat) || 0;
+      if (totalC > 0) {
+        updated.balanceCt = Math.max(0, totalC - soldC).toFixed(2);
       }
     }
 
@@ -248,6 +264,9 @@ const PolishPurchase = () => {
               aed: formData.aed,
               remark: formData.remark,
               note: formData.note,
+              saleInvoiceNo: formData.saleInvoiceNo,
+              saleCarat: formData.saleCarat,
+              balanceCt: formData.balanceCt,
               broker: formData.broker,
               dtDecDate: formData.dtDecDate,
               dtDecDueDate: formData.dtDecDueDate,
@@ -290,6 +309,9 @@ const PolishPurchase = () => {
       aed: formData.aed,
       remark: formData.remark,
       note: formData.note,
+      saleInvoiceNo: formData.saleInvoiceNo,
+      saleCarat: formData.saleCarat,
+      balanceCt: formData.balanceCt,
       broker: formData.broker,
       dtDecDate: formData.dtDecDate,
       dtDecDueDate: formData.dtDecDueDate,
@@ -921,10 +943,59 @@ const PolishPurchase = () => {
                   </div>
                 </div>
 
-                {/* Section 3: Dubai Trade Tracking */}
+                {/* Section 3: Sale & Balance Details */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    3. Dubai Trade Tracking
+                    3. Sale & Balance Details
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        Sale Invoice No
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Sale Invoice #"
+                        value={formData.saleInvoiceNo}
+                        onChange={(e) => handleInputChange("saleInvoiceNo", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        Sale Carat
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.saleCarat}
+                        onChange={(e) => handleInputChange("saleCarat", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono focus:outline-hidden focus:border-[#111111]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        Balance CT
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={formData.balanceCt}
+                        disabled
+                        className="w-full bg-[#F5F5F2] text-[#555555] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs font-mono font-semibold cursor-not-allowed focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Dubai Trade Tracking */}
+                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
+                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
+                    4. Dubai Trade Tracking
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
@@ -982,7 +1053,7 @@ const PolishPurchase = () => {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Cleared / In Process"
+                        placeholder="In Process"
                         value={formData.dubaiTradeStatus}
                         onChange={(e) => handleInputChange("dubaiTradeStatus", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -991,10 +1062,10 @@ const PolishPurchase = () => {
                   </div>
                 </div>
 
-                {/* Section 4: Remarks & Notes */}
+                {/* Section 5: Remarks & Notes */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    4. Remarks & Notes
+                    5. Remarks & Notes
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>

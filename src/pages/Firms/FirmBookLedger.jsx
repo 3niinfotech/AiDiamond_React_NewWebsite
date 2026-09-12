@@ -251,22 +251,8 @@ const FirmBookLedger = () => {
     const errors = {};
     if (!formData.date) errors.date = "Date is required";
     if (!formData.description?.trim()) errors.description = "Description is required";
-
-    if (isSignatureBook) {
-      const hasAnyAmount =
-        Number(formData.cashUsd) > 0 ||
-        Number(formData.cashAed) > 0 ||
-        Number(formData.aedBank) > 0 ||
-        Number(formData.usdBank) > 0 ||
-        Number(formData.amount) > 0;
-      if (!hasAnyAmount) {
-        errors.amount = "At least one amount is required";
-      }
-    } else {
-      if (!formData.amount || Number(formData.amount) <= 0) errors.amount = "Valid amount is required";
-      if (!formData.type) errors.type = "Type is required";
-    }
-
+    if (!formData.amount || Number(formData.amount) <= 0) errors.amount = "Valid amount is required";
+    if (!formData.type) errors.type = "Type is required";
     if (!formData.crDr) errors.crDr = "Select CR or DR";
 
     setFormErrors(errors);
@@ -277,25 +263,15 @@ const FirmBookLedger = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    let amt = Number(formData.amount) || 0;
-    if (isSignatureBook) {
-      const cUsd = Number(formData.cashUsd) || 0;
-      const cAed = Number(formData.cashAed) || 0;
-      const bAed = Number(formData.aedBank) || 0;
-      const bUsd = Number(formData.usdBank) || 0;
-      amt = bUsd || cUsd || bAed || cAed || Number(formData.amount) || 0;
-    }
-
+    const amt = Number(formData.amount) || 0;
     const isCr = formData.crDr === "CR";
-    const aedVal = formData.aed
-      ? Number(formData.aed)
-      : (Number(formData.aedBank) || Number(formData.cashAed) || 0);
+    const aedVal = formData.aed ? Number(formData.aed) : 0;
 
     const recordPayload = {
       date: formData.date,
       description: formData.description.trim(),
-      bankType: formData.bankType || formData.type,
-      type: isSignatureBook ? (formData.bankType || "NBF - USD") : formData.type,
+      bankType: formData.type || "Bank",
+      type: formData.type || "Bank",
       cashUsd: Number(formData.cashUsd) || 0,
       cashAed: Number(formData.cashAed) || 0,
       aedBank: Number(formData.aedBank) || 0,
@@ -1023,255 +999,100 @@ const FirmBookLedger = () => {
             </div>
 
             <form onSubmit={handleFormSubmit} className="p-5 space-y-3.5 text-xs">
-              {isSignatureBook ? (
-                <>
-                  {/* Row 1: Date & CR/DR */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
-                      />
-                      {formErrors.date && (
-                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
-                      )}
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
+                  />
+                  {formErrors.date && (
+                    <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
+                  )}
+                </div>
 
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        CR / DR *
-                      </label>
-                      <select
-                        value={formData.crDr}
-                        onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] font-semibold outline-none cursor-pointer"
-                      >
-                        <option value="CR">CR (Credit / Inflow)</option>
-                        <option value="DR">DR (Debit / Outflow)</option>
-                      </select>
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    Type *
+                  </label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value, bankType: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                  >
+                    <option value="Bank">Bank</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Angadia">Angadia</option>
+                    <option value="Dubai Wire">Dubai Wire</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                </div>
+              </div>
 
-                  {/* Row 2: Bank Type & Description */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Bank Type *
-                      </label>
-                      <select
-                        value={formData.bankType || "NBF - USD"}
-                        onChange={(e) => setFormData({ ...formData, bankType: e.target.value, type: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
-                      >
-                        <option value="NBF - USD">NBF - USD</option>
-                        <option value="NBF - AED">NBF - AED</option>
-                        <option value="IndusInd">IndusInd</option>
-                        <option value="CASH - AED">CASH - AED</option>
-                        <option value="CASH - USD">CASH - USD</option>
-                      </select>
-                    </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                  Description / Party Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Enter party name or description"
+                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                />
+                {formErrors.description && (
+                  <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
+                )}
+              </div>
 
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Description *
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Enter transaction description..."
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                      />
-                      {formErrors.description && (
-                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
-                      )}
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    CR / DR *
+                  </label>
+                  <select
+                    value={formData.crDr}
+                    onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                  >
+                    <option value="CR">CR (Credit / Inflow)</option>
+                    <option value="DR">DR (Debit / Outflow)</option>
+                  </select>
+                </div>
 
-                  {/* Row 3: Cash & Bank Breakdown */}
-                  <div className="bg-[#FAFAF8] p-3 rounded-sm border border-[#E8E8E4] space-y-2.5">
-                    <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                      Cash & Bank Figures
-                    </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                          CASH (USD)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.cashUsd}
-                          onChange={(e) => setFormData({ ...formData, cashUsd: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
-                        />
-                      </div>
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    Amount *
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.amount}
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    placeholder="Enter transaction amount"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  />
+                  {formErrors.amount && (
+                    <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
+                  )}
+                </div>
+              </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                          CASH (AED)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.cashAed}
-                          onChange={(e) => setFormData({ ...formData, cashAed: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                          AED (Bank)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.aedBank}
-                          onChange={(e) => setFormData({ ...formData, aedBank: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                          USD (Bank)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={formData.usdBank}
-                          onChange={(e) => setFormData({ ...formData, usdBank: e.target.value })}
-                          className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-mono text-left text-[#111111] outline-none"
-                        />
-                      </div>
-                    </div>
-                    {formErrors.amount && (
-                      <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
-                    )}
-                  </div>
-
-                  {/* Row 4: Remark */}
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                      Remark / Note
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formData.remark}
-                      onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                      placeholder="Enter reference note or voucher details..."
-                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none resize-none"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
-                      />
-                      {formErrors.date && (
-                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Type *
-                      </label>
-                      <select
-                        value={formData.type}
-                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
-                      >
-                        <option value="Bank">Bank</option>
-                        <option value="Cash">Cash</option>
-                        <option value="Angadia">Angadia</option>
-                        <option value="Dubai Wire">Dubai Wire</option>
-                        <option value="Cheque">Cheque</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                      Description / Party Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Enter party name or description"
-                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                    />
-                    {formErrors.description && (
-                      <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        CR / DR *
-                      </label>
-                      <select
-                        value={formData.crDr}
-                        onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
-                      >
-                        <option value="CR">CR (Credit / Inflow)</option>
-                        <option value="DR">DR (Debit / Outflow)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                        Amount *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        placeholder="Enter transaction amount"
-                        className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                      />
-                      {formErrors.amount && (
-                        <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                      Remark / Note
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.remark}
-                      onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                      placeholder="Enter reference note or voucher details"
-                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                    />
-                  </div>
-                </>
-              )}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                  Remark / Note
+                </label>
+                <input
+                  type="text"
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  placeholder="Enter reference note or voucher details"
+                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                />
+              </div>
 
               <div className="pt-3 border-t border-[#E8E8E4] flex items-center justify-end gap-2.5">
                 <button

@@ -18,8 +18,8 @@ import {
   getAllFirms,
   formatCurrency,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { VOUCHER_CONFIGS, STORAGE_KEY } from "./voucherConstants";
 
@@ -27,7 +27,8 @@ const config = VOUCHER_CONFIGS["lgd-purchase"];
 
 const LgdPurchase = () => {
   const navigate = useNavigate();
-  const currentUser = getAuthUser();
+  const { user: authUser, logout } = useAuth();
+  const currentUser = authUser || getAuthUser();
   const allAvailableParties = getAllFirms();
 
   // Master vouchers state
@@ -149,8 +150,8 @@ const LgdPurchase = () => {
     showToast("✓ Voucher entry deleted successfully");
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 

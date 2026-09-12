@@ -24,11 +24,12 @@ import {
   getFirmRecords,
   calculateFirmSummary,
   getAuthUser,
-  clearAuthUser,
 } from "../../data/firmData";
+import { useAuth } from "../../hooks/useAuth";
 
 const PartyMaster = () => {
   const navigate = useNavigate();
+  const { user: authUser, logout } = useAuth();
   const [currentUser, setCurrentUser] = useState(null);
   const [firms, setFirms] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,23 +64,23 @@ const PartyMaster = () => {
   const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
-    const user = getAuthUser();
+    const user = authUser || getAuthUser();
     if (!user) {
       setCurrentUser({ name: "RSDXB", username: "RSDXB" });
     } else {
       setCurrentUser(user);
     }
     loadFirms();
-  }, []);
+  }, [authUser]);
 
   const loadFirms = () => {
     const list = getAllFirms();
     setFirms(list);
   };
 
-  const handleLogout = () => {
-    clearAuthUser();
-    navigate("/login");
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   const showToast = (msg) => {
