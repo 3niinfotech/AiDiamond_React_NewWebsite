@@ -33,7 +33,7 @@ export const exportToCSV = (data, filename = 'ledger_export') => {
       aedVal,
       `"${crDrVal}"`,
       amountVal,
-      item.runningBal || item.bal || 0,
+      Math.abs(item.runningBal || item.bal || 0),
       `"${(item.remark || item.remarks || '').replace(/"/g, '""')}"`,
     ];
   });
@@ -300,7 +300,7 @@ export const exportToExcel = (data, firmName = 'Royal Rays Ledger', filename = '
         <td class="td-right" style="color: #475569;">${aedVal}</td>
         <td class="${isCr ? 'cr-text' : 'dr-text'}">${crDrVal}</td>
         <td class="td-right">${Number(amountVal).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-        <td class="td-right" style="${(item.runningBal || item.bal || 0) < 0 ? 'color: #B91C1C;' : ''}">${Number(item.runningBal || item.bal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+        <td class="td-right">${Number(Math.abs(item.runningBal || item.bal || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
         <td class="td-left" style="color: #475569;">${item.remark || item.remarks || ''}</td>
       </tr>
     `;
