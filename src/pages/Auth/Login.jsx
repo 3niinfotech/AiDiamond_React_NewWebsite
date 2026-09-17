@@ -72,7 +72,7 @@ const Login = () => {
       console.error("Login attempt failed:", err);
       setError(
         err?.message ||
-          "Invalid username or password. Access restricted to authorized personnel."
+        "Invalid username or password. Access restricted to authorized personnel."
       );
     } finally {
       setIsLoading(false);
@@ -103,13 +103,13 @@ const Login = () => {
             <div className="p-6 sm:p-8">
               {/* Brand Logo & Heading */}
               <div className="text-center pb-5 mb-5 border-b border-[#EAEAE6]">
-                <Link to="/" className="inline-block mb-3">
+                {/*<Link to="/" className="inline-block mb-3">
                   <img
                     src={logoDark}
                     alt="Royal Rays"
                     className="h-12 mx-auto object-contain"
                   />
-                </Link>
+                </Link>*/}
                 <h1 className="text-xl font-serif font-medium text-[#111111] tracking-tight">
                   Sign In
                 </h1>
