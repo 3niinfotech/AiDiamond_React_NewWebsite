@@ -1,3 +1,5 @@
+import { formatDateDDMMYYYY } from "../../utils/formatUtils";
+import { Pagination } from "../../components/Pagination";
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -15,6 +17,7 @@ import {
   FaSort,
   FaSortUp,
   FaSortDown,
+  FaTag,
 } from "react-icons/fa";
 import {
   getAllFirms,
@@ -25,19 +28,29 @@ import {
   formatCurrency,
 } from "../../data/firmData";
 import { exportToCSV, exportToExcel } from "../../utils/excelExport";
+import { rsFirmLedgerEntryService } from "../../services/rsFirmLedgerEntryService";
+import { rsFirmBookMasterService } from "../../services/rsFirmBookMasterService";
+import { rsBookTypeMasterService } from "../../services/rsBookTypeMasterService";
+import { BookTypeQuickModal } from "../../components/modals/BookTypeQuickModal";
 
 const FirmBookLedger = () => {
   const { firmId } = useParams();
   const navigate = useNavigate();
 
-  const currentFirm = useMemo(() => getFirmById(firmId), [firmId]);
+  const [currentFirm, setCurrentFirm] = useState(() => getFirmById(firmId));
+  const [allFirmsList, setAllFirmsList] = useState(() => getAllFirms());
   const [records, setRecords] = useState([]);
+  const [isApiConnected, setIsApiConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Multi-select Checkbox State
   const [selectedIds, setSelectedIds] = useState([]);
 
   // Search & Filters
-  const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("All");
   const [selectedCrDr, setSelectedCrDr] = useState("All");
   const [dateFilter, setDateFilter] = useState("All");
@@ -50,19 +63,27 @@ const FirmBookLedger = () => {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isBookTypeQuickModalOpen, setIsBookTypeQuickModalOpen] = useState(false);
+  const [bookTypeOptions, setBookTypeOptions] = useState([
+    { id: "1", name: "Bank" },
+    { id: "2", name: "Cash" },
+    { id: "3", name: "Angadia" },
+    { id: "4", name: "Dubai Wire" },
+    { id: "5", name: "Cheque" },
+  ]);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState(null);
 
-  const isSignatureBook = currentFirm.id === "signature-book" || currentFirm.isSignatureBook;
+  const isSignatureBook = currentFirm?.id === "signature-book" || currentFirm?.isSignatureBook;
 
   // Form Fields
   const initialFormState = {
     date: new Date().toISOString().split("T")[0],
     description: "",
-    bankType: "NBF - USD",
+    bankType: "Bank",
     type: "Bank",
     cashUsd: "",
     cashAed: "",
@@ -76,11 +97,64 @@ const FirmBookLedger = () => {
   const [formData, setFormData] = useState(initialFormState);
   const [formErrors, setFormErrors] = useState({});
 
+  const loadBookTypes = async () => {
+    const res = await rsBookTypeMasterService.getAllBookTypes();
+    if (res.success && res.data && res.data.length > 0) {
+      setBookTypeOptions(res.data.filter((t) => t.isActive));
+    }
+  };
+
+  const handleTypeAdded = (newTypeName) => {
+    loadBookTypes();
+    if (newTypeName) {
+      setFormData((prev) => ({ ...prev, type: newTypeName, bankType: newTypeName }));
+    }
+  };
+
+  const loadFirmAndEntries = async () => {
+    setIsLoading(true);
+    let activeFirm = getFirmById(firmId);
+
+    try {
+      const firmRes = await rsFirmBookMasterService.getAllFirms();
+      if (firmRes.success && firmRes.data && firmRes.data.length > 0) {
+        setAllFirmsList(firmRes.data);
+        const search = String(firmId).toLowerCase().trim();
+        const found = firmRes.data.find((f) => {
+          if (String(f.id).toLowerCase() === search) return true;
+          if (f.firmId && String(f.firmId).toLowerCase() === search) return true;
+          if (f.shortCode && f.shortCode.toLowerCase() === search) return true;
+          if (f.name && f.name.toLowerCase() === search) return true;
+          if (f.name && f.name.toLowerCase().replace(/\s+/g, "-") === search) return true;
+          return false;
+        });
+
+        if (found) {
+          activeFirm = found;
+        }
+      }
+      setCurrentFirm(activeFirm);
+
+      const res = await rsFirmLedgerEntryService.getEntriesByFirm(activeFirm);
+      if (res.success) {
+        setRecords(res.data);
+        setIsApiConnected(res.isApi);
+      }
+    } catch (err) {
+      console.error("Error loading firm and entries:", err);
+      const loaded = getFirmRecords(activeFirm?.id || firmId);
+      setRecords(loaded);
+      setIsApiConnected(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loaded = getFirmRecords(currentFirm.id);
-    setRecords(loaded);
+    loadFirmAndEntries();
+    loadBookTypes();
     setSelectedIds([]);
-  }, [currentFirm.id]);
+  }, [firmId]);
 
   const showToast = (msg, type = "success") => {
     setToastMessage({ msg, type });
@@ -153,6 +227,12 @@ const FirmBookLedger = () => {
       return matchesSearch && matchesType && matchesCrDr && matchesDate;
     });
   }, [recordsWithBalance, searchQuery, selectedType, selectedCrDr, dateFilter]);
+
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return (filteredRecords || []).slice(start, start + itemsPerPage);
+  }, [filteredRecords, currentPage, itemsPerPage]);
+
 
   // Sorted Records
   const sortedRecords = useMemo(() => {
@@ -259,64 +339,57 @@ const FirmBookLedger = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const amt = Number(formData.amount) || 0;
-    const isCr = formData.crDr === "CR";
-    const aedVal = formData.aed ? Number(formData.aed) : 0;
-
-    const recordPayload = {
-      date: formData.date,
-      description: formData.description.trim(),
-      bankType: formData.type || "Bank",
-      type: formData.type || "Bank",
-      cashUsd: Number(formData.cashUsd) || 0,
-      cashAed: Number(formData.cashAed) || 0,
-      aedBank: Number(formData.aedBank) || 0,
-      usdBank: Number(formData.usdBank) || 0,
-      aed: aedVal,
-      crDr: formData.crDr,
-      amount: amt,
-      credit: isCr ? amt : 0,
-      debit: !isCr ? amt : 0,
-      remark: formData.remark.trim(),
-    };
-
-    let updatedList = [];
-    if (isEditMode && selectedRecord) {
-      updatedList = records.map((r) =>
-        r.id === selectedRecord.id
-          ? {
-              ...r,
-              ...recordPayload,
-            }
-          : r
-      );
-      showToast("Entry updated successfully");
-    } else {
-      const newEntry = {
-        id: `rec-${currentFirm.id}-${Date.now()}`,
-        ...recordPayload,
-      };
-      updatedList = [newEntry, ...records];
-      showToast("New Data Entry added");
+    setIsLoading(true);
+    try {
+      if (isEditMode && selectedRecord) {
+        const targetId = selectedRecord.entryId || selectedRecord.id;
+        const res = await rsFirmLedgerEntryService.updateEntry(targetId, currentFirm, formData);
+        if (res.success) {
+          showToast(res.message || "Entry updated successfully");
+        } else {
+          showToast(res.message || "Failed to update entry", "warning");
+        }
+      } else {
+        const res = await rsFirmLedgerEntryService.createEntry(currentFirm, formData);
+        if (res.success) {
+          showToast(res.message || "New Data Entry added");
+        } else {
+          showToast(res.message || "Failed to save entry", "warning");
+        }
+      }
+      await loadFirmAndEntries();
+      setIsFormModalOpen(false);
+    } catch (err) {
+      console.error("Form submit error:", err);
+      showToast("Failed to save entry", "warning");
+    } finally {
+      setIsLoading(false);
     }
-
-    setRecords(updatedList);
-    saveFirmRecords(currentFirm.id, updatedList);
-    setIsFormModalOpen(false);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedRecord) return;
-    const updatedList = records.filter((r) => r.id !== selectedRecord.id);
-    setRecords(updatedList);
-    saveFirmRecords(currentFirm.id, updatedList);
-    setIsDeleteModalOpen(false);
-    showToast("Entry deleted", "warning");
-    setSelectedRecord(null);
+
+    setIsLoading(true);
+    try {
+      const targetId = selectedRecord.entryId || selectedRecord.id;
+      const res = await rsFirmLedgerEntryService.deleteEntry(targetId, currentFirm);
+      if (res.success) {
+        showToast(res.message || "Entry deleted", "warning");
+      }
+      await loadFirmAndEntries();
+      setIsDeleteModalOpen(false);
+      setSelectedRecord(null);
+    } catch (err) {
+      console.error("Delete error:", err);
+      showToast("Failed to delete entry", "warning");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -387,23 +460,34 @@ const FirmBookLedger = () => {
             <span>All Books</span>
           </Link>
           <h1 className="text-base font-serif font-bold text-[#111111]">
-            {currentFirm.name}
+            {currentFirm?.name || "Firm Book"}
           </h1>
           <span className="text-[11px] uppercase font-mono font-medium px-2 py-0.5 rounded-xs bg-[#F5F5F2] text-[#444444] border border-[#E0E0DB]">
-            {currentFirm.badge}
+            {currentFirm?.badge || "Book"}
+          </span>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold flex items-center gap-1 border ${
+              isApiConnected
+                ? "bg-[#DCFCE7] text-[#166534] border-[#86EFAC]"
+                : "bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]"
+            }`}
+            title={isApiConnected ? "Connected to RS_FirmLedgerEntry API" : "Using Local Storage Mode"}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isApiConnected ? "bg-[#16A34A]" : "bg-[#D97706]"}`} />
+            {isApiConnected ? "API LIVE" : "LOCAL MODE"}
           </span>
         </div>
 
         {/* Right: Switcher + Export Buttons + Add Entry (No Print Button) */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <select
-            value={currentFirm.id}
+            value={currentFirm?.id || currentFirm?.firmId || firmId}
             onChange={(e) => navigate(`/firms/${e.target.value}`)}
             className="px-3 py-1.5 bg-white border border-[#D1D1CB] rounded-sm text-xs font-semibold text-[#111111] focus:border-black outline-none cursor-pointer"
           >
-            {getAllFirms().map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name} ({f.shortCode})
+            {allFirmsList.map((f) => (
+              <option key={f.id || f.firmId} value={f.id || f.firmId}>
+                {f.name} ({f.shortCode || "FRM"})
               </option>
             ))}
           </select>
@@ -424,6 +508,15 @@ const FirmBookLedger = () => {
           >
             <FaFileCsv size={13} />
             <span>CSV</span>
+          </button>
+
+          <button
+            onClick={() => navigate("/book-type-master")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#F5F5F2] border border-[#D1D1CB] text-xs text-[#111111] font-semibold transition-colors cursor-pointer"
+            title="Book Type Master CRUD"
+          >
+            <FaTag size={12} className="text-[#D4A853]" />
+            <span>Book Types</span>
           </button>
 
           <button
@@ -525,11 +618,11 @@ const FirmBookLedger = () => {
               className="w-full sm:w-36 px-3 py-2 bg-white border border-[#D1D1CB] rounded-sm text-xs font-medium text-[#111111] outline-none focus:border-black cursor-pointer transition-colors"
             >
               <option value="All">All Types</option>
-              <option value="Bank">Bank</option>
-              <option value="Cash">Cash</option>
-              <option value="Angadia">Angadia</option>
-              <option value="Dubai Wire">Dubai Wire</option>
-              <option value="Cheque">Cheque</option>
+              {bookTypeOptions.map((bt) => (
+                <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
+                  {bt.name}
+                </option>
+              ))}
             </select>
 
             <select
@@ -798,7 +891,7 @@ const FirmBookLedger = () => {
 
                         {/* 1. Date - Center */}
                         <td className="py-1.5 px-3 text-center border-r border-[#D1D1CB] font-mono whitespace-nowrap text-xs text-[#333333]">
-                          {row.date}
+                          {formatDateDDMMYYYY(row.date)}
                         </td>
 
                         {/* 2. Description - Left */}
@@ -1008,19 +1101,30 @@ const FirmBookLedger = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                    Type *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444]">
+                      Type *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsBookTypeQuickModalOpen(true)}
+                      className="text-[10px] font-semibold text-[#111111] hover:text-[#D4A853] underline cursor-pointer flex items-center gap-1"
+                      title="Add or Manage Book Types"
+                    >
+                      <FaTag size={9} />
+                      <span>+ Manage Types</span>
+                    </button>
+                  </div>
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value, bankType: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
                   >
-                    <option value="Bank">Bank</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Angadia">Angadia</option>
-                    <option value="Dubai Wire">Dubai Wire</option>
-                    <option value="Cheque">Cheque</option>
+                    {bookTypeOptions.map((bt) => (
+                      <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
+                        {bt.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1341,6 +1445,13 @@ const FirmBookLedger = () => {
           </div>
         </div>
       )}
+
+      {/* Book Type Quick Manage Modal */}
+      <BookTypeQuickModal
+        isOpen={isBookTypeQuickModalOpen}
+        onClose={() => setIsBookTypeQuickModalOpen(false)}
+        onTypeAdded={handleTypeAdded}
+      />
     </div>
   );
 };

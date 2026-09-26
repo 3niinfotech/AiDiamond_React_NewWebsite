@@ -1,3 +1,7 @@
+import { formatDateDDMMYYYY } from "../../utils/formatUtils";
+import { Pagination } from "../../components/Pagination";
+import { rsPartyMasterService } from "../../services/rsPartyMasterService";
+import { rsSignatureVoucherService } from "../../services/rsSignatureVoucherService";
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -29,7 +33,7 @@ const PaymentReceivePage = () => {
   const { user: authUser, logout } = useAuth();
   const voucherConfig = VOUCHER_CONFIGS["payment-receive"];
   const currentUser = authUser || getAuthUser();
-  const allAvailableParties = getAllFirms();
+  const [allAvailableParties, setAllAvailableParties] = useState([]);
 
   const [allVouchers, setAllVouchers] = useState(() => {
     try {
@@ -39,6 +43,42 @@ const PaymentReceivePage = () => {
       return [];
     }
   });
+  const [isApiConnected, setIsApiConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  
+  const loadParties = async () => {
+    try {
+      const res = await rsPartyMasterService.getAllParties();
+      if (res && res.success && res.data) {
+        setAllAvailableParties(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load parties", err);
+    }
+  };
+
+  const loadVouchers = async () => {
+    loadParties();
+    setIsLoading(true);
+    try {
+      const typeName = config?.name || "Payment Receive";
+      const res = await rsSignatureVoucherService.getVouchersByType(typeName);
+      if (res && res.success) {
+        setAllVouchers(res.data);
+        setIsApiConnected(res.isApi);
+      }
+    } catch (err) {
+      console.error("Failed to load vouchers", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadVouchers();
+  }, []);
+
 
   const typeVouchers = useMemo(() => {
     return allVouchers.filter((v) => v.entryType === voucherConfig.name);
@@ -64,7 +104,17 @@ const PaymentReceivePage = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
   const [deleteVoucherTarget, setDeleteVoucherTarget] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const paginatedList = useMemo(() => {
+    const list = typeof filteredEntries !== 'undefined' ? filteredEntries : [];
+    const start = (currentPage - 1) * itemsPerPage;
+    return list.slice(start, start + itemsPerPage);
+  }, [typeof filteredEntries !== 'undefined' ? filteredEntries : null, currentPage, itemsPerPage]);
+
+
+const [searchTerm, setSearchTerm] = useState("");
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -73,12 +123,20 @@ const PaymentReceivePage = () => {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  const saveVouchersToStorage = (updated) => {
+  const saveVouchersToStorage = async (updated, targetItem = null, isEdit = false) => {
     setAllVouchers(updated);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      if (targetItem) {
+        if (isEdit) {
+          await rsSignatureVoucherService.updateVoucher(targetItem);
+        } else {
+          await rsSignatureVoucherService.createVoucher(targetItem);
+        }
+        await loadVouchers();
+      }
     } catch (e) {
-      console.error("Failed to save vouchers", e);
+      console.error("Failed to sync voucher with API", e);
     }
   };
 
@@ -117,12 +175,22 @@ const PaymentReceivePage = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteVoucherTarget) return;
-    const updated = allVouchers.filter((v) => v.id !== deleteVoucherTarget.id);
-    saveVouchersToStorage(updated);
-    setDeleteVoucherTarget(null);
-    showToast("✓ Voucher entry deleted successfully");
+    try {
+      const targetId = deleteVoucherTarget.voucherId || deleteVoucherTarget.id;
+      const res = await rsSignatureVoucherService.deleteVoucher(targetId);
+      if (res && res.success) {
+        showToast("✓ Voucher entry deleted successfully");
+      } else {
+        showToast(`⚠️ ${res?.message || "Failed to delete voucher"}`);
+      }
+      await loadVouchers();
+    } catch (err) {
+      console.error("Delete error", err);
+    } finally {
+      setDeleteVoucherTarget(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -188,6 +256,14 @@ const PaymentReceivePage = () => {
           </table>
           <div class="footer">
             <div>Generated on: ${new Date().toLocaleString()}</div>
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredEntries.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+
             <div>Authorized Signatory: ____________________</div>
           </div>
           <script>
@@ -204,7 +280,7 @@ const PaymentReceivePage = () => {
     }
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     const errors = {};
 
@@ -254,7 +330,43 @@ const PaymentReceivePage = () => {
             }
           : item
       );
-      saveVouchersToStorage(updated);
+      const updatedItem = {
+        ...editingVoucher,
+        voucherId: editingVoucher.voucherId || editingVoucher.id,
+        date: formData.date,
+        pDate: formData.date,
+        partyName: effectiveParty,
+        purchaseParty: effectiveParty,
+        invoiceNo: formData.invoiceNo,
+        terms: formData.terms,
+        dueDate: formData.dueDate,
+        dueDays: formData.dueDays,
+        pcs: formData.pcs,
+        carat: formData.carats,
+        carats: parseFloat(formData.carats) || 0,
+        rate: parseFloat(formData.rate) || 0,
+        perCarat: formData.rate,
+        amount: amt,
+        totalAmountDollar: formData.amount,
+        aed: formData.aed,
+        remark: formData.remark,
+        note: formData.note,
+        saleInvoiceNo: formData.saleInvoiceNo,
+        saleCarat: formData.saleCarat,
+        balanceCt: formData.balanceCt,
+        broker: formData.broker,
+        kpcNo: formData.kpcNo,
+        dtDecDate: formData.dtDecDate,
+        dtDecDueDate: formData.dtDecDueDate,
+        dtDecNo: formData.dtDecNo,
+        dubaiFileDate: formData.dubaiFileDate,
+        dubaiTradeStatus: formData.dubaiTradeStatus,
+        dhEntry: formData.dhEntry,
+        remark2: formData.remark2,
+        itemDescription: formData.itemDescription || `${config.category} Lot`,
+      };
+      await rsSignatureVoucherService.updateVoucher(updatedItem);
+      await loadVouchers();
       setEditingVoucher(null);
       setIsAddModalOpen(false);
       setFormData(getInitialFormData());
@@ -286,7 +398,13 @@ const PaymentReceivePage = () => {
     };
 
     const updated = [newVoucher, ...allVouchers];
-    saveVouchersToStorage(updated);
+    const res = await rsSignatureVoucherService.createVoucher(newVoucher);
+    if (res && res.success) {
+      showToast(`✓ ${config.name} entry added successfully!`);
+    } else {
+      showToast(`⚠️ ${res?.message || "Failed to save entry"}`);
+    }
+    await loadVouchers();
     setIsAddModalOpen(false);
     setFormData(getInitialFormData());
     setFormErrors({});
@@ -385,6 +503,10 @@ const PaymentReceivePage = () => {
         <div className="flex items-center gap-2.5">
           <span className="text-xs font-mono text-[#555555] bg-[#F5F5F2] border border-[#E8E8E4] px-2.5 py-1 rounded-sm">
             {currentUser?.username || "RSDXB"}
+          </span>
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded border ${isApiConnected ? "bg-[#F0FDF4] text-[#166534] border-[#BBF7D0]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isApiConnected ? "bg-[#22C55E] animate-pulse" : "bg-[#F59E0B]"}`} />
+            {isApiConnected ? "API LIVE" : "OFFLINE"}
           </span>
           <button
             onClick={handleLogout}
@@ -715,7 +837,7 @@ const PaymentReceivePage = () => {
                     >
                       <option value="">-- Select Party --</option>
                       {allAvailableParties.map((p) => (
-                        <option key={p.id} value={p.name}>
+                        <option key={p.id} value={p.name || p.partyName}>
                           {p.name}
                         </option>
                       ))}

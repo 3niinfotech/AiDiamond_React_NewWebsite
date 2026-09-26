@@ -1,3 +1,16 @@
+const formatDateDDMMYYYY = (dateVal) => {
+  if (!dateVal) return '';
+  try {
+    const str = String(dateVal).trim();
+    if (!str) return '';
+    const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (match) {
+      return `${match[3].padStart(2, '0')}-${match[2].padStart(2, '0')}-${match[1]}`;
+    }
+  } catch (e) {}
+  return String(dateVal);
+};
+
 /**
  * Excel and CSV export utility with clean spreadsheet formatting matching professional accounting standards
  * Columns: Date | Description | Type | AED | CR / DR | Amount | Balance | Remark
@@ -27,7 +40,7 @@ export const exportToCSV = (data, filename = 'ledger_export') => {
     const aedVal = item.aed && Number(item.aed) > 0 ? Number(item.aed).toFixed(2) : '';
 
     return [
-      `"${item.date || ''}"`,
+      `"${formatDateDDMMYYYY(item.date || item.pDate || '')}"`,
       `"${(item.description || item.partyName || '').replace(/"/g, '""')}"`,
       `"${item.type || ''}"`,
       aedVal,

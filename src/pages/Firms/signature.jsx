@@ -1,3 +1,7 @@
+import { formatDateDDMMYYYY } from "../../utils/formatUtils";
+import { Pagination } from "../../components/Pagination";
+import { rsPartyMasterService } from "../../services/rsPartyMasterService";
+import { rsSignatureVoucherService } from "../../services/rsSignatureVoucherService";
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -151,86 +155,7 @@ const ENTRY_TYPES = [
     },
 ];
 
-const INITIAL_SIGNATURE_DATA = [
-    {
-        id: "sig-001",
-        date: "2026-09-10",
-        entryType: "Rough Purchase",
-        partyName: "Kiran Gems Pvt Ltd",
-        itemDescription: "Run-of-Mine Rough Parcels #RP-402",
-        carats: 250.50,
-        rate: 18500,
-        amount: 4634250,
-        crDr: "DR",
-        paymentMode: "Bank Transfer",
-        remark: "Direct Bourse Consignment Invoice #KP-8891",
-    },
-    {
-        id: "sig-002",
-        date: "2026-09-09",
-        entryType: "Polish Sale",
-        partyName: "Venus Jewel",
-        itemDescription: "Triple Excellent 1.00ct - 2.50ct Solitaires GIA",
-        carats: 48.20,
-        rate: 185000,
-        amount: 8917000,
-        crDr: "CR",
-        paymentMode: "Dubai Wire",
-        remark: "Export shipment Dubai DMCC clearance",
-    },
-    {
-        id: "sig-003",
-        date: "2026-09-08",
-        entryType: "LGD Purchase",
-        partyName: "Darsh Jewellers",
-        itemDescription: "CVD Oval & Pear Lab Grown Lots",
-        carats: 110.00,
-        rate: 12500,
-        amount: 1375000,
-        crDr: "DR",
-        paymentMode: "Bank Transfer",
-        remark: "Surat Labgrown Delivery Memo #LG-112",
-    },
-    {
-        id: "sig-004",
-        date: "2026-09-07",
-        entryType: "Payment Receive",
-        partyName: "Venus Jewel",
-        itemDescription: "Part payment settlement against Polish invoice",
-        carats: 0,
-        rate: 0,
-        amount: 5000000,
-        crDr: "CR",
-        paymentMode: "Bank Transfer",
-        remark: "HDFC Fort RTGS Ref #9812401",
-    },
-    {
-        id: "sig-005",
-        date: "2026-09-06",
-        entryType: "Expense",
-        partyName: "IGI Lab Mumbai",
-        itemDescription: "Grading & Laser Inscription Charges",
-        carats: 0,
-        rate: 0,
-        amount: 185000,
-        crDr: "DR",
-        paymentMode: "Bank Transfer",
-        remark: "Assaying batch #IGI-994",
-    },
-    {
-        id: "sig-006",
-        date: "2026-09-05",
-        entryType: "Rough Sale",
-        partyName: "Shree Ram Gems",
-        itemDescription: "Industrial Sawable Rough Selection (150 Cts)",
-        carats: 150.00,
-        rate: 22000,
-        amount: 3300000,
-        crDr: "CR",
-        paymentMode: "Angadia",
-        remark: "Cash parcel settlement",
-    },
-];
+const INITIAL_SIGNATURE_DATA = [];
 
 const STORAGE_KEY = "royal_rays_signature_vouchers_v1";
 
@@ -242,7 +167,10 @@ const Signature = () => {
     const [activeTab, setActiveTab] = useState("vouchers"); // "vouchers" | "reports"
     const [activeReport, setActiveReport] = useState("closing-stock"); // "closing-stock" | "payable-receivable" | "summary"
     const [selectedEntryFilter, setSelectedEntryFilter] = useState("All");
-    const [searchQuery, setSearchQuery] = useState("");
+      const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+const [searchQuery, setSearchQuery] = useState("");
     const [toastMessage, setToastMessage] = useState(null);
 
     // Modal State
@@ -264,6 +192,37 @@ const Signature = () => {
     // View Modal State
     const [viewRecord, setViewRecord] = useState(null);
 
+    const [isApiConnected, setIsApiConnected] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    
+  const loadParties = async () => {
+    try {
+      const res = await rsPartyMasterService.getAllParties();
+      if (res && res.success && res.data) {
+        setAllAvailableParties(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load parties", err);
+    }
+  };
+
+  const loadVouchers = async () => {
+    loadParties();
+        setIsLoading(true);
+        try {
+            const res = await rsSignatureVoucherService.getAllVouchers();
+            if (res && res.success) {
+                setVouchers(res.data);
+                setIsApiConnected(res.isApi);
+            }
+        } catch (err) {
+            console.error("Failed to load vouchers", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
         const user = authUser || getAuthUser();
         if (!user) {
@@ -271,20 +230,7 @@ const Signature = () => {
         } else {
             setCurrentUser(user);
         }
-
-        if (typeof window !== "undefined") {
-            try {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                if (saved) {
-                    setVouchers(JSON.parse(saved));
-                } else {
-                    setVouchers(INITIAL_SIGNATURE_DATA);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SIGNATURE_DATA));
-                }
-            } catch (e) {
-                setVouchers(INITIAL_SIGNATURE_DATA);
-            }
-        }
+        loadVouchers();
     }, [authUser]);
 
     const saveVouchers = (updated) => {
@@ -369,17 +315,26 @@ const Signature = () => {
             remark: modalFormData.remark.trim(),
         };
 
-        const updated = [newVoucher, ...vouchers];
-        saveVouchers(updated);
+        rsSignatureVoucherService.createVoucher(newVoucher).then((res) => {
+            if (res && res.success) {
+                showToast(res.message || `${modalFormData.entryType} entry saved!`);
+                loadVouchers();
+            } else {
+                showToast(res?.message || "Error saving voucher");
+            }
+        });
         setIsModalOpen(false);
-        showToast(`${modalFormData.entryType} entry created successfully!`);
     };
 
     // Delete Voucher
-    const handleDeleteVoucher = (id) => {
-        const updated = vouchers.filter((v) => v.id !== id);
-        saveVouchers(updated);
-        showToast("Voucher deleted successfully");
+    const handleDeleteVoucher = async (id) => {
+        const res = await rsSignatureVoucherService.deleteVoucher(id);
+        if (res && res.success) {
+            showToast(res.message || "Voucher deleted successfully");
+            loadVouchers();
+        } else {
+            showToast(res?.message || "Failed to delete voucher");
+        }
     };
 
     // Filtered Vouchers
@@ -400,6 +355,12 @@ const Signature = () => {
             return matchesSearch && matchesType;
         });
     }, [vouchers, searchQuery, selectedEntryFilter]);
+
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return (filteredVouchers || []).slice(start, start + itemsPerPage);
+  }, [filteredVouchers, currentPage, itemsPerPage]);
+
 
     // Overall Statistics
     const stats = useMemo(() => {
@@ -530,7 +491,7 @@ const Signature = () => {
         showToast("Exported to Excel (.xls)");
     };
 
-    const allAvailableParties = getAllFirms();
+    const [allAvailableParties, setAllAvailableParties] = useState([]);
 
     return (
         <div className="min-h-screen w-full bg-[#FAFAF8] text-[#111111] font-sans flex flex-col pb-12 selection:bg-black selection:text-white">
@@ -554,6 +515,10 @@ const Signature = () => {
                 </div>
 
                 <div className="flex items-center gap-2.5">
+                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-sm border ${isApiConnected ? "bg-[#F0FDF4] text-[#166534] border-[#BBF7D0]" : "bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]"}`}>
+                        <span className={`w-2 h-2 rounded-full ${isApiConnected ? "bg-[#22C55E] animate-pulse" : "bg-[#F59E0B]"}`} />
+                        {isApiConnected ? "API LIVE (RS_SignatureVoucher)" : "OFFLINE (LOCAL)"}
+                    </span>
                     <span className="text-xs font-mono text-[#555555] bg-[#F5F5F2] border border-[#E8E8E4] px-2.5 py-1 rounded-sm">
                         {currentUser?.username || "RSDXB"}
                     </span>
@@ -570,9 +535,9 @@ const Signature = () => {
             {/* Main Container */}
             <main className="flex-1 w-full px-4 sm:px-8 py-5">
                 {/* KPI Strip */}
-                {/* <div className="bg-white border border-[#D1D1CB] rounded-sm p-2 sm:p-3 mb-5 shadow-2xs">
+                <div className="bg-white border border-[#D1D1CB] rounded-sm p-2 sm:p-3 mb-5 shadow-2xs">
                     <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E0E0DB]">
-                        1. Total Purchases
+                        
                         <div className="px-3 py-1.5">
                             <div className="text-[10px] uppercase font-bold tracking-wider text-[#991B1B]">
                                 Total Purchases
@@ -583,7 +548,7 @@ const Signature = () => {
                             <div className="text-[10px] text-[#777777]">Rough + Polish + LGD</div>
                         </div>
 
-                        2. Total Sales
+                        
                         <div className="px-3 py-1.5">
                             <div className="text-[10px] uppercase font-bold tracking-wider text-[#166534]">
                                 Total Sales
@@ -594,7 +559,7 @@ const Signature = () => {
                             <div className="text-[10px] text-[#777777]">Direct & Bourse Sales</div>
                         </div>
 
-                        3. Total Closing Stock
+                        
                         <div className="px-3 py-1.5">
                             <div className="text-[10px] uppercase font-bold tracking-wider text-[#111111]">
                                 Closing Stock (Cts)
@@ -605,7 +570,7 @@ const Signature = () => {
                             <div className="text-[10px] text-[#777777]">Active Physical Vault</div>
                         </div>
 
-                        4. Trade Net Position
+                        
                         <div className="px-3 py-1.5">
                             <div className="text-[10px] uppercase font-bold tracking-wider text-[#2563EB]">
                                 Net Trading Balance
@@ -616,7 +581,7 @@ const Signature = () => {
                             <div className="text-[10px] text-[#777777]">Sales - Purchases - Exp</div>
                         </div>
                     </div>
-                </div> */}
+                </div>
 
                 {/* Section Navigation Tabs: [1. Vouchers & Forms] vs [2. Reports] */}
                 <div className="flex items-center justify-between gap-3 border-b border-[#E0E0DB] pb-3 mb-4">
@@ -755,7 +720,7 @@ const Signature = () => {
                         </div>
 
                         {/* Filter Toolbar */}
-                        {/* <div className="bg-white p-3 rounded-sm border border-[#E0E0DB] flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-2xs">
+                        <div className="bg-white p-3 rounded-sm border border-[#E0E0DB] flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-2xs">
                             <div className="relative w-full md:w-80 shrink-0">
                                 <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999] text-xs pointer-events-none" />
                                 <input
@@ -798,10 +763,10 @@ const Signature = () => {
                                     </button>
                                 ))}
                             </div>
-                        </div> */}
+                        </div>
 
                         {/* Vouchers Table */}
-                        {/* <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
+                        <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse text-left">
                                     <thead>
@@ -818,13 +783,13 @@ const Signature = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#EAEAE6] text-xs">
-                                        {filteredVouchers.length > 0 ? (
-                                            filteredVouchers.map((row) => {
+                                        {paginatedList.length > 0 ? (
+                                            paginatedList.map((row) => {
                                                 const isCr = row.crDr === "CR";
                                                 return (
                                                     <tr key={row.id} className="hover:bg-[#FAFAF8] transition-colors">
                                                         <td className="py-2 px-3 text-center border-r border-[#D1D1CB] font-mono text-[#444444] whitespace-nowrap">
-                                                            {row.date}
+                                                            {formatDateDDMMYYYY(row.date)}
                                                         </td>
                                                         <td className="py-2 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap">
                                                             <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-xs bg-[#F5F5F2] text-[#333333] border border-[#E0E0DB]">
@@ -890,7 +855,15 @@ const Signature = () => {
                                     </tbody>
                                 </table>
                             </div>
-                        </div> */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredVouchers.length}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+
+                        </div>
                     </div>
                 )}
 
@@ -1205,7 +1178,7 @@ const Signature = () => {
                                     />
                                     <datalist id="partyList">
                                         {allAvailableParties.map((p) => (
-                                            <option key={p.id} value={p.name} />
+                                            <option key={p.id} value={p.name || p.partyName} />
                                         ))}
                                     </datalist>
                                 </div>

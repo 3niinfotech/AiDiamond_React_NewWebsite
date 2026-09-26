@@ -1,3 +1,5 @@
+import { formatDateDDMMYYYY } from "../../utils/formatUtils";
+import { Pagination } from "../../components/Pagination";
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -26,13 +28,18 @@ import {
   getAuthUser,
 } from "../../data/firmData";
 import { useAuth } from "../../hooks/useAuth";
+import { rsPartyMasterService } from "../../services/rsPartyMasterService";
 
 const PartyMaster = () => {
   const navigate = useNavigate();
   const { user: authUser, logout } = useAuth();
   const [currentUser, setCurrentUser] = useState(null);
   const [firms, setFirms] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+const [searchQuery, setSearchQuery] = useState("");
+  const [isApiConnected, setIsApiConnected] = useState(false);
 
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -73,9 +80,15 @@ const PartyMaster = () => {
     loadFirms();
   }, [authUser]);
 
-  const loadFirms = () => {
-    const list = getAllFirms();
-    setFirms(list);
+  const loadFirms = async () => {
+    const res = await rsPartyMasterService.getAllParties();
+    if (res.success && res.data) {
+      setFirms(res.data);
+      setIsApiConnected(Boolean(res.isApi));
+    } else {
+      setFirms(getAllFirms());
+      setIsApiConnected(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -104,20 +117,13 @@ const PartyMaster = () => {
   };
 
   // Handle Create Submit
-  const handleCreateSubmit = (e) => {
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     const cleanName = createFormData.partyName.trim();
     if (!cleanName) {
       setCreateErrors({ partyName: "Party Name is required" });
       return;
     }
-
-    const slug =
-      cleanName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || `party-${Date.now()}`;
-    const id = `${slug}-${Date.now().toString(36).substring(2, 6)}`;
 
     const words = cleanName.split(/\s+/).filter(Boolean);
     let shortCode = "";
@@ -133,40 +139,26 @@ const PartyMaster = () => {
         "PRT";
     }
 
-    const newParty = {
-      id,
-      name: cleanName,
+    const result = await rsPartyMasterService.createParty({
+      partyName: cleanName,
       shortCode,
-      tagline: createFormData.trn.trim()
-        ? `TRN: ${createFormData.trn.trim()}`
-        : createFormData.contact.trim()
-        ? `Contact: ${createFormData.contact.trim()}`
-        : "Party Ledger Account",
-      description: createFormData.address.trim()
-        ? createFormData.address.trim()
-        : createFormData.email.trim()
-        ? `Email: ${createFormData.email.trim()}`
-        : "Registered party ledger account.",
-      badge: "Party Book",
-      address: createFormData.address.trim(),
-      trn: createFormData.trn.trim(),
-      email: createFormData.email.trim(),
-      contact: createFormData.contact.trim(),
-      founded: new Date().getFullYear().toString(),
-      accentColor: "#D4A853",
-      bgGradient:
-        "linear-gradient(135deg, rgba(212, 168, 83, 0.15) 0%, rgba(10, 10, 12, 0.95) 100%)",
-      icon: "FaBuilding",
-    };
+      address: createFormData.address,
+      trn: createFormData.trn,
+      email: createFormData.email,
+      contact: createFormData.contact,
+    });
 
-    addCustomFirm(newParty);
-    loadFirms();
-    setIsCreateModalOpen(false);
-    showToast(`Party "${cleanName}" created successfully!`);
+    if (result.success) {
+      await loadFirms();
+      setIsCreateModalOpen(false);
+      showToast(`Party "${cleanName}" created successfully!`);
+    } else {
+      setCreateErrors({ partyName: result.message || "Failed to create party" });
+    }
   };
 
   // Open Edit Modal
-  const handleOpenEditModal = (party) => {
+  const handleOpenEditModal = async (party) => {
     setSelectedParty(party);
     setEditFormData({
       partyName: party.name || "",
@@ -177,10 +169,24 @@ const PartyMaster = () => {
     });
     setEditErrors({});
     setIsEditModalOpen(true);
+
+    const targetId = party.partyId || party.id;
+    if (targetId && !isNaN(Number(targetId))) {
+      const res = await rsPartyMasterService.getPartyById(targetId);
+      if (res.success && res.data) {
+        setEditFormData({
+          partyName: res.data.name || "",
+          address: res.data.address || "",
+          trn: res.data.trn || "",
+          email: res.data.email || "",
+          contact: res.data.contact || "",
+        });
+      }
+    }
   };
 
   // Handle Edit Submit
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!selectedParty) return;
 
@@ -205,30 +211,23 @@ const PartyMaster = () => {
         "PRT";
     }
 
-    const updatedFields = {
-      name: cleanName,
+    const result = await rsPartyMasterService.updateParty(selectedParty.partyId || selectedParty.id, {
+      partyName: cleanName,
       shortCode,
-      tagline: editFormData.trn.trim()
-        ? `TRN: ${editFormData.trn.trim()}`
-        : editFormData.contact.trim()
-        ? `Contact: ${editFormData.contact.trim()}`
-        : selectedParty.tagline || "Party Ledger Account",
-      description: editFormData.address.trim()
-        ? editFormData.address.trim()
-        : editFormData.email.trim()
-        ? `Email: ${editFormData.email.trim()}`
-        : selectedParty.description || "Registered party ledger account.",
-      address: editFormData.address.trim(),
-      trn: editFormData.trn.trim(),
-      email: editFormData.email.trim(),
-      contact: editFormData.contact.trim(),
-    };
+      address: editFormData.address,
+      trn: editFormData.trn,
+      email: editFormData.email,
+      contact: editFormData.contact,
+    });
 
-    updateFirm(selectedParty.id, updatedFields);
-    loadFirms();
-    setIsEditModalOpen(false);
-    setSelectedParty(null);
-    showToast(`Party "${cleanName}" updated successfully!`);
+    if (result.success) {
+      await loadFirms();
+      setIsEditModalOpen(false);
+      setSelectedParty(null);
+      showToast(`Party "${cleanName}" updated successfully!`);
+    } else {
+      setEditErrors({ partyName: result.message || "Failed to update party" });
+    }
   };
 
   // Open Delete Modal
@@ -238,11 +237,12 @@ const PartyMaster = () => {
   };
 
   // Handle Confirm Delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!selectedParty) return;
     const name = selectedParty.name;
-    deleteFirm(selectedParty.id);
-    loadFirms();
+    const targetId = selectedParty.partyId || selectedParty.id;
+    await rsPartyMasterService.deleteParty(targetId);
+    await loadFirms();
     setIsDeleteModalOpen(false);
     setSelectedParty(null);
     showToast(`Party "${name}" deleted successfully!`);
@@ -263,6 +263,12 @@ const PartyMaster = () => {
     );
   }, [firms, searchQuery]);
 
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return (filteredFirms || []).slice(start, start + itemsPerPage);
+  }, [filteredFirms, currentPage, itemsPerPage]);
+
+
   return (
     <div className="min-h-screen w-full bg-[#FAFAF8] text-[#111111] font-sans flex flex-col selection:bg-black selection:text-white">
       {/* Top Navbar */}
@@ -282,6 +288,17 @@ const PartyMaster = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {isApiConnected ? (
+            <span className="text-[10px] font-mono text-[#15803D] bg-[#F0FDF4] border border-[#BBF7D0] px-2.5 py-1 rounded-sm font-semibold flex items-center gap-1.5" title="Connected to http://localhost:44386/RS_PartyMaster">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
+              <span>API Connected</span>
+            </span>
+          ) : (
+            <span className="text-[10px] font-mono text-[#B45309] bg-[#FFFBEB] border border-[#FDE68A] px-2.5 py-1 rounded-sm font-semibold flex items-center gap-1.5" title="Targeting http://localhost:44386/RS_PartyMaster">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
+              <span>Local Mode (API Offline)</span>
+            </span>
+          )}
           <span className="text-xs font-mono text-[#555555] bg-[#F5F5F2] border border-[#E8E8E4] px-2.5 py-1 rounded-sm">
             {currentUser?.username || "RSDXB"}
           </span>

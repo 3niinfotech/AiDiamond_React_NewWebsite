@@ -19,6 +19,7 @@ import Login from '../pages/Auth/Login';
 import FirmSelection from '../pages/Firms/FirmSelection';
 import FirmBookLedger from '../pages/Firms/FirmBookLedger';
 import PartyMaster from '../pages/Firms/PartyMaster';
+import BookTypeMaster from '../pages/Firms/BookTypeMaster';
 import Signature from '../pages/Firms/signature';
 import VoucherEntryPage from '../pages/Firms/VoucherEntryPage';
 import ProtectedRoute from '../components/auth/ProtectedRoute';
@@ -44,6 +45,14 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute>
               <PartyMaster />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/book-type-master"
+          element={
+            <ProtectedRoute>
+              <BookTypeMaster />
             </ProtectedRoute>
           }
         />
