@@ -41,41 +41,57 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    const clickTimestamp = new Date();
+    const formattedClickTime = clickTimestamp.toLocaleTimeString() + `.${String(clickTimestamp.getMilliseconds()).padStart(3, "0")}ms`;
+    
+    console.log(`%c[Login Button Clicked]%c Time: ${formattedClickTime} (${clickTimestamp.toISOString()})`, "color: #2563eb; font-weight: bold;", "color: inherit;");
+    console.time("⏱️ Login Processing Time");
+    
     setError("");
 
     const cleanUsername = username.trim();
     const cleanPassword = password.trim();
 
+    // Conditional checks and console management
     if (!cleanUsername) {
+      console.warn(`[Login Condition] Failed: Username is missing at ${new Date().toLocaleTimeString()}`);
       setError("Please enter your username.");
+      console.timeEnd("⏱️ Login Processing Time");
       return;
-    }
-
-    if (!cleanPassword) {
+    } else if (!cleanPassword) {
+      console.warn(`[Login Condition] Failed: Password is missing at ${new Date().toLocaleTimeString()}`);
       setError("Please enter your password.");
+      console.timeEnd("⏱️ Login Processing Time");
       return;
+    } else {
+      console.log(`[Login Condition] Validation Passed: Credentials present for "${cleanUsername}". Initiating login...`);
     }
 
     setIsLoading(true);
 
     try {
+      console.log(`[Login Request] Sending authentication request at ${new Date().toLocaleTimeString()}`);
       await login({
         username: cleanUsername,
         password: cleanPassword,
         rememberMe,
       });
 
+      console.log(`%c[Login Success]%c Authenticated successfully at ${new Date().toLocaleTimeString()}`, "color: #16a34a; font-weight: bold;", "color: inherit;");
+      
       // Redirect to original attempted page or default /firms
       const origin = location.state?.from?.pathname || "/firms";
+      console.log(`[Login Navigation] Redirecting user to: ${origin}`);
       navigate(origin, { replace: true });
     } catch (err) {
-      console.error("Login attempt failed:", err);
+      console.error(`%c[Login Error]%c Attempt failed at ${new Date().toLocaleTimeString()}:`, "color: #dc2626; font-weight: bold;", "color: inherit;", err);
       setError(
         err?.message ||
         "Invalid username or password. Access restricted to authorized personnel."
       );
     } finally {
       setIsLoading(false);
+      console.timeEnd("⏱️ Login Processing Time");
     }
   };
 
@@ -143,7 +159,7 @@ const Login = () => {
                         setUsername(e.target.value);
                         setError("");
                       }}
-                      placeholder="Enter username (e.g. admin or RSDXB)"
+                      placeholder="Enter username"
                       disabled={isLoading}
                       autoComplete="username"
                       className="w-full pl-9 pr-3 py-2.5 bg-[#FAFAF8] focus:bg-white border border-[#D1D1CB] focus:border-[#111111] focus:ring-1 focus:ring-[#111111] rounded-sm text-xs font-medium text-[#111111] placeholder-[#999999] outline-none transition-all"
@@ -169,7 +185,7 @@ const Login = () => {
                         setPassword(e.target.value);
                         setError("");
                       }}
-                      placeholder="Enter password (e.g. admin123 or Royal@1504)"
+                      placeholder="Enter password"
                       disabled={isLoading}
                       autoComplete="current-password"
                       className="w-full pl-9 pr-10 py-2.5 bg-[#FAFAF8] focus:bg-white border border-[#D1D1CB] focus:border-[#111111] focus:ring-1 focus:ring-[#111111] rounded-sm text-xs font-medium text-[#111111] placeholder-[#999999] outline-none transition-all"

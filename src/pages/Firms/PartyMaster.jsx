@@ -17,6 +17,9 @@ import {
   FaPhoneAlt,
   FaEnvelope,
   FaIdCard,
+  FaSort,
+  FaSortUp,
+  FaSortDown,
 } from "react-icons/fa";
 import {
   getAllFirms,
@@ -35,10 +38,7 @@ const PartyMaster = () => {
   const { user: authUser, logout } = useAuth();
   const [currentUser, setCurrentUser] = useState(null);
   const [firms, setFirms] = useState([]);
-    const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-
-const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isApiConnected, setIsApiConnected] = useState(false);
 
   // Create Modal State
@@ -46,6 +46,7 @@ const [searchQuery, setSearchQuery] = useState("");
   const [createFormData, setCreateFormData] = useState({
     partyName: "",
     address: "",
+    location: "",
     trn: "",
     email: "",
     contact: "",
@@ -58,6 +59,7 @@ const [searchQuery, setSearchQuery] = useState("");
   const [editFormData, setEditFormData] = useState({
     partyName: "",
     address: "",
+    location: "",
     trn: "",
     email: "",
     contact: "",
@@ -70,6 +72,8 @@ const [searchQuery, setSearchQuery] = useState("");
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
 
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     const user = authUser || getAuthUser();
     if (!user) {
@@ -81,13 +85,21 @@ const [searchQuery, setSearchQuery] = useState("");
   }, [authUser]);
 
   const loadFirms = async () => {
-    const res = await rsPartyMasterService.getAllParties();
-    if (res.success && res.data) {
-      setFirms(res.data);
-      setIsApiConnected(Boolean(res.isApi));
-    } else {
+    setIsLoading(true);
+    try {
+      const res = await rsPartyMasterService.getAllParties();
+      if (res.success && res.data) {
+        setFirms(res.data);
+        setIsApiConnected(Boolean(res.isApi));
+      } else {
+        setFirms(getAllFirms());
+        setIsApiConnected(false);
+      }
+    } catch (err) {
+      console.error(err);
       setFirms(getAllFirms());
-      setIsApiConnected(false);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -108,6 +120,7 @@ const [searchQuery, setSearchQuery] = useState("");
     setCreateFormData({
       partyName: "",
       address: "",
+      location: "",
       trn: "",
       email: "",
       contact: "",
@@ -143,6 +156,7 @@ const [searchQuery, setSearchQuery] = useState("");
       partyName: cleanName,
       shortCode,
       address: createFormData.address,
+      location: createFormData.location,
       trn: createFormData.trn,
       email: createFormData.email,
       contact: createFormData.contact,
@@ -163,6 +177,7 @@ const [searchQuery, setSearchQuery] = useState("");
     setEditFormData({
       partyName: party.name || "",
       address: party.address || "",
+      location: party.location || "",
       trn: party.trn || "",
       email: party.email || "",
       contact: party.contact || "",
@@ -177,6 +192,7 @@ const [searchQuery, setSearchQuery] = useState("");
         setEditFormData({
           partyName: res.data.name || "",
           address: res.data.address || "",
+          location: res.data.location || "",
           trn: res.data.trn || "",
           email: res.data.email || "",
           contact: res.data.contact || "",
@@ -215,10 +231,12 @@ const [searchQuery, setSearchQuery] = useState("");
       partyName: cleanName,
       shortCode,
       address: editFormData.address,
+      location: editFormData.location,
       trn: editFormData.trn,
       email: editFormData.email,
       contact: editFormData.contact,
     });
+
 
     if (result.success) {
       await loadFirms();
@@ -263,11 +281,95 @@ const [searchQuery, setSearchQuery] = useState("");
     );
   }, [firms, searchQuery]);
 
+  // Sorting
+  const [sortField, setSortField] = useState("");
+  const [sortDirection, setSortDirection] = useState("asc");
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedFirms = useMemo(() => {
+    if (!sortField) return filteredFirms;
+    return [...filteredFirms].sort((a, b) => {
+      let aVal = "";
+      let bVal = "";
+
+      switch (sortField) {
+        case "partyName":
+        case "name":
+          aVal = (a.name || a.partyName || "").toLowerCase();
+          bVal = (b.name || b.partyName || "").toLowerCase();
+          break;
+        case "code":
+        case "shortCode":
+          aVal = (a.shortCode || "").toLowerCase();
+          bVal = (b.shortCode || "").toLowerCase();
+          break;
+        case "address":
+          aVal = (a.address || "").toLowerCase();
+          bVal = (b.address || "").toLowerCase();
+          break;
+        case "location":
+          aVal = (a.location || "").toLowerCase();
+          bVal = (b.location || "").toLowerCase();
+          break;
+        case "trn":
+          aVal = (a.trn || "").toLowerCase();
+          bVal = (b.trn || "").toLowerCase();
+          break;
+        case "email":
+          aVal = (a.email || "").toLowerCase();
+          bVal = (b.email || "").toLowerCase();
+          break;
+        case "contact":
+          aVal = (a.contact || "").toLowerCase();
+          bVal = (b.contact || "").toLowerCase();
+          break;
+        case "srNo":
+          aVal = Number(a.partyId || a.id || 0);
+          bVal = Number(b.partyId || b.id || 0);
+          return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+        default:
+          aVal = (a[sortField] || "").toString().toLowerCase();
+          bVal = (b[sortField] || "").toString().toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filteredFirms, sortField, sortDirection]);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   const paginatedList = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return (filteredFirms || []).slice(start, start + itemsPerPage);
-  }, [filteredFirms, currentPage, itemsPerPage]);
+    return (sortedFirms || []).slice(start, start + itemsPerPage);
+  }, [sortedFirms, currentPage, itemsPerPage]);
 
+  // Checkbox selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedList.length && paginatedList.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedList.map((v, i) => v.id || v.partyId || i));
+    }
+  };
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+  const isAllSelected =
+    paginatedList.length > 0 && selectedIds.length === paginatedList.length;
 
   return (
     <div className="min-h-screen w-full bg-[#FAFAF8] text-[#111111] font-sans flex flex-col selection:bg-black selection:text-white">
@@ -276,7 +378,7 @@ const [searchQuery, setSearchQuery] = useState("");
         <div className="flex items-center gap-3">
           <Link
             to="/firms"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
             <span>Firm Portals</span>
@@ -368,30 +470,162 @@ const [searchQuery, setSearchQuery] = useState("");
 
         {/* Party Master Table (Matching existing Table UI & Colors) */}
         <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-210px)] relative">
             <table className="w-full border-collapse text-left">
-              <thead>
+              <thead className="sticky top-0 z-20 bg-[#F5F5F2] shadow-xs">
                 <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[11px] font-bold uppercase tracking-wider text-[#444444]">
-                  <th className="py-2.5 px-3 text-center w-12 border-r border-[#D1D1CB]">#</th>
-                  <th className="py-2.5 px-4 border-r border-[#D1D1CB]">Party Name</th>
-                  <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB] w-20">Code</th>
-                  <th className="py-2.5 px-4 border-r border-[#D1D1CB]">Address</th>
-                  <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB]">TRN</th>
-                  <th className="py-2.5 px-4 border-r border-[#D1D1CB]">Email</th>
-                  <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB]">Contact</th>
-                  <th className="py-2.5 px-3 text-center w-32">Action</th>
+                  <th className="py-2.5 px-2.5 text-center border-r border-[#D1D1CB] w-9 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                      title="Select all rows"
+                    />
+                  </th>
+                  <th
+                    onClick={() => handleSort("srNo")}
+                    className="py-2.5 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>SR NO</span>
+                      {sortField === "srNo" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("partyName")}
+                    className="py-2.5 px-4 border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-start gap-1">
+                      <span>Party Name</span>
+                      {sortField === "partyName" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("code")}
+                    className="py-2.5 px-3 text-center border-r border-[#D1D1CB] w-20 font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Code</span>
+                      {sortField === "code" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("address")}
+                    className="py-2.5 px-4 border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-start gap-1">
+                      <span>Address</span>
+                      {sortField === "address" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("location")}
+                    className="py-2.5 px-3 text-center border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Location</span>
+                      {sortField === "location" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("trn")}
+                    className="py-2.5 px-3 text-center border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>TRN</span>
+                      {sortField === "trn" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("email")}
+                    className="py-2.5 px-4 border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-start gap-1">
+                      <span>Email</span>
+                      {sortField === "email" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("contact")}
+                    className="py-2.5 px-3 text-center border-r border-[#D1D1CB] font-semibold cursor-pointer hover:bg-[#EBEBE6] select-none"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Contact</span>
+                      {sortField === "contact" ? (
+                        sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                      ) : (
+                        <FaSort className="text-[#BBBBBB]" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="py-2.5 px-3 text-center w-32 font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAE6] text-xs">
-                {filteredFirms.length > 0 ? (
-                  filteredFirms.map((party, index) => (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan="10" className="py-16 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2.5">
+                        <div className="w-8 h-8 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-semibold text-[#555555]">
+                          Loading parties...
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedList.length > 0 ? (
+                  paginatedList.map((party, index) => {
+                    const rowId = party.id || party.partyId || index;
+                    const isSelected = selectedIds.includes(rowId);
+                    return (
                     <tr
-                      key={party.id}
-                      className="hover:bg-[#FAFAF8] transition-colors"
+                      key={party.id || index}
+                      className={`transition-colors ${
+                        isSelected ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-[#FAFAF8]"
+                      }`}
                     >
-                      {/* 1. # */}
-                      <td className="py-2 px-3 text-center border-r border-[#D1D1CB] font-mono text-[#777777]">
-                        {index + 1}
+                      {/* Checkbox */}
+                      <td className="py-2 px-2.5 text-center border-r border-[#D1D1CB]">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRow(rowId)}
+                          className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        />
+                      </td>
+
+                      {/* SR NO */}
+                      <td className="py-2 px-2.5 text-center border-r border-[#D1D1CB] font-mono text-xs text-[#777777] whitespace-nowrap">
+                        {(currentPage - 1) * itemsPerPage + index + 1}
                       </td>
 
                       {/* 2. Party Name */}
@@ -415,6 +649,11 @@ const [searchQuery, setSearchQuery] = useState("");
                       {/* 4. Address */}
                       <td className="py-2 px-4 border-r border-[#D1D1CB] text-[#555555] max-w-xs truncate" title={party.address}>
                         {party.address || "-"}
+                      </td>
+
+                      {/* 4.1 Location */}
+                      <td className="py-2 px-3 text-center border-r border-[#D1D1CB] text-[#555555]">
+                        {party.location || "-"}
                       </td>
 
                       {/* 5. TRN */}
@@ -473,10 +712,11 @@ const [searchQuery, setSearchQuery] = useState("");
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan="8" className="py-10 text-center text-[#777777]">
+                    <td colSpan="10" className="py-10 text-center text-[#777777]">
                       <FaBuilding className="mx-auto text-[#CCCCCC] text-2xl mb-2" />
                       <p className="text-sm text-[#333333] font-semibold">
                         No parties found matching "{searchQuery}"
@@ -488,12 +728,13 @@ const [searchQuery, setSearchQuery] = useState("");
             </table>
           </div>
 
-          <div className="py-2.5 px-4 bg-[#FAFAF8] border-t border-[#D1D1CB] flex items-center justify-between text-xs text-[#555555] font-medium">
-            <span>
-              Showing <strong>{filteredFirms.length}</strong> of {firms.length} Parties
-            </span>
-            <span>Royal Rays Bourse Directory</span>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredFirms.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={setItemsPerPage}
+          />
         </div>
       </main>
 
@@ -569,23 +810,43 @@ const [searchQuery, setSearchQuery] = useState("");
                 />
               </div>
 
-              {/* TRN */}
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  TRN
-                </label>
-                <input
-                  type="text"
-                  value={createFormData.trn}
-                  onChange={(e) =>
-                    setCreateFormData({
-                      ...createFormData,
-                      trn: e.target.value,
-                    })
-                  }
-                  placeholder="Enter Tax Registration Number (TRN)"
-                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                />
+              {/* Location & TRN in One Line */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={createFormData.location}
+                    onChange={(e) =>
+                      setCreateFormData({
+                        ...createFormData,
+                        location: e.target.value,
+                      })
+                    }
+                    placeholder="Enter city / location"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    TRN
+                  </label>
+                  <input
+                    type="text"
+                    value={createFormData.trn}
+                    onChange={(e) =>
+                      setCreateFormData({
+                        ...createFormData,
+                        trn: e.target.value,
+                      })
+                    }
+                    placeholder="Enter Tax Registration Number (TRN)"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  />
+                </div>
               </div>
 
               {/* Email & Contact Grid */}
@@ -720,23 +981,43 @@ const [searchQuery, setSearchQuery] = useState("");
                 />
               </div>
 
-              {/* TRN */}
-              <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  TRN
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.trn}
-                  onChange={(e) =>
-                    setEditFormData({
-                      ...editFormData,
-                      trn: e.target.value,
-                    })
-                  }
-                  placeholder="Enter Tax Registration Number (TRN)"
-                  className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
-                />
+              {/* Location & TRN in One Line */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.location}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        location: e.target.value,
+                      })
+                    }
+                    placeholder="Enter city / location"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    TRN
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.trn}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        trn: e.target.value,
+                      })
+                    }
+                    placeholder="Enter Tax Registration Number (TRN)"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  />
+                </div>
               </div>
 
               {/* Email & Contact Grid */}

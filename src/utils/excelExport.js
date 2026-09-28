@@ -143,7 +143,7 @@ export const exportToExcel = (data, firmName = 'Royal Rays Ledger', filename = '
                 <x:DataValidation>
                   <x:Range>C4:C${data.length + 3}</x:Range>
                   <x:Type>List</x:Type>
-                  <x:Value>&quot;Bank,Cash,Angadia,Dubai Wire,Cheque&quot;</x:Value>
+                  <x:Value>&quot;Bank,Cash&quot;</x:Value>
                   <x:ShowDropDown/>
                 </x:DataValidation>
               </x:WorksheetOptions>

@@ -2,6 +2,7 @@ import { formatDateDDMMYYYY } from "../../utils/formatUtils";
 import { Pagination } from "../../components/Pagination";
 import { rsPartyMasterService } from "../../services/rsPartyMasterService";
 import { rsSignatureVoucherService } from "../../services/rsSignatureVoucherService";
+import { SearchablePartySelect } from "../../components/SearchablePartySelect";
 import React, { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -47,7 +48,6 @@ const PolishSale = () => {
   const [isApiConnected, setIsApiConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  
   const loadParties = async () => {
     try {
       const res = await rsPartyMasterService.getAllParties();
@@ -80,7 +80,6 @@ const PolishSale = () => {
     loadVouchers();
   }, []);
 
-
   // Filter vouchers for Polish Sale
   const typeVouchers = useMemo(() => {
     return allVouchers.filter((v) => v.entryType === config.name);
@@ -88,24 +87,28 @@ const PolishSale = () => {
 
   const getInitialFormData = () => ({
     date: new Date().toISOString().split("T")[0],
-    partyName: "",
-    customParty: "",
-    itemDescription: "",
-    carats: "",
-    rate: "",
-    amount: "",
-    currency: "USD",
-    paymentMode: "Bank Transfer",
     invoiceNo: "",
     terms: "",
     dueDate: "",
     dueDays: "",
+    partyName: "",
+    customParty: "",
+    broker: "",
+    brokerPercent: "",
+    carats: "",
+    rate: "",
+    amount: "",
     aed: "",
-    remark: "",
+    kpcNo: "",
     dtDecDate: "",
     dtDecDueDate: "",
     dtDecNo: "",
     dubaiFileDate: "",
+    remark: "",
+    note: "",
+    currency: "USD",
+    paymentMode: "Bank Transfer",
+    itemDescription: "",
   });
 
   // Form State
@@ -114,60 +117,104 @@ const PolishSale = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
   const [deleteVoucherTarget, setDeleteVoucherTarget] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
+
+  const filteredEntries = useMemo(() => {
+    let list = typeVouchers;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter(
+        (v) =>
+          (v.invoiceNo && v.invoiceNo.toLowerCase().includes(term)) ||
+          (v.partyName && v.partyName.toLowerCase().includes(term)) ||
+          (v.purchaseParty && v.purchaseParty.toLowerCase().includes(term)) ||
+          (v.saleParty && v.saleParty.toLowerCase().includes(term)) ||
+          (v.broker && v.broker.toLowerCase().includes(term)) ||
+          (v.kpcNo && v.kpcNo.toLowerCase().includes(term)) ||
+          (v.remark && v.remark.toLowerCase().includes(term))
+      );
+    }
+    return list;
+  }, [typeVouchers, searchTerm]);
+
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return (filteredEntries || []).slice(start, start + itemsPerPage);
+  }, [filteredEntries, currentPage, itemsPerPage]);
+
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedList.length && paginatedList.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedList.map((v, i) => v.id || v.voucherId || i));
+    }
+  };
+
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const isAllSelected = paginatedList.length > 0 && selectedIds.length === paginatedList.length;
 
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // Sync to local storage
-  const saveVouchersToStorage = async (updated, targetItem = null, isEdit = false) => {
-    setAllVouchers(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      if (targetItem) {
-        if (isEdit) {
-          await rsSignatureVoucherService.updateVoucher(targetItem);
-        } else {
-          await rsSignatureVoucherService.createVoucher(targetItem);
-        }
-        await loadVouchers();
-      }
-    } catch (e) {
-      console.error("Failed to sync voucher with API", e);
-    }
-  };
-
   const handleOpenEdit = (v) => {
     setEditingVoucher(v);
     const partyVal = v.partyName || v.saleParty || v.customerParty || "";
     const isStandardParty = allAvailableParties.some((p) => p.name === partyVal);
+
+    const rawAmt = v.amount !== undefined && v.amount !== null && v.amount !== "" ? String(v.amount) : (v.totalAmountDollar ? String(v.totalAmountDollar) : "");
+    const amtNum = parseFloat(rawAmt);
+    const rawCarats = v.carat || (v.carats ? String(v.carats) : "");
+    const caratsNum = parseFloat(rawCarats);
+    const rawRate = v.perCarat || (v.rate ? String(v.rate) : "");
+
+    let effectiveRate = rawRate;
+    if ((!effectiveRate || parseFloat(effectiveRate) === 0) && amtNum > 0 && caratsNum > 0) {
+      effectiveRate = (Math.round((amtNum / caratsNum) * 100) / 100).toFixed(2);
+    }
+
+    let effectiveAed = v.aed !== undefined && v.aed !== null ? String(v.aed) : "";
+    if ((!effectiveAed || parseFloat(effectiveAed) === 0) && amtNum > 0) {
+      effectiveAed = (Math.round(amtNum * 3.6725 * 100) / 100).toFixed(2);
+    }
+
     setFormData({
-      date: v.pDate || v.date || new Date().toISOString().split("T")[0],
-      partyName: isStandardParty ? partyVal : "__custom__",
-      customParty: isStandardParty ? "" : partyVal,
-      itemDescription: v.itemDescription || "",
-      carats: v.carat || (v.carats ? String(v.carats) : ""),
-      rate: v.perCarat || (v.rate ? String(v.rate) : ""),
-      amount: v.amount ? String(v.amount) : (v.totalAmountDollar ? String(v.totalAmountDollar) : ""),
-      currency: v.currency || "USD",
-      paymentMode: v.paymentMode || "Bank Transfer",
+      date: v.date || v.sDate || v.pDate || new Date().toISOString().split("T")[0],
       invoiceNo: v.invoiceNo || "",
       terms: v.terms || "",
       dueDate: v.dueDate || "",
       dueDays: v.dueDays || "",
-      aed: v.aed || "",
-      remark: v.remark || "",
+      partyName: isStandardParty ? partyVal : "__custom__",
+      customParty: isStandardParty ? "" : partyVal,
+      broker: v.broker || "",
+      brokerPercent: v.brokerPercent || v.brokeragePercent || v.brokerPercentage || "",
+      carats: rawCarats,
+      rate: effectiveRate,
+      amount: rawAmt,
+      aed: effectiveAed,
+      kpcNo: v.kpcNo || v.kpNumber || "",
       dtDecDate: v.dtDecDate || "",
       dtDecDueDate: v.dtDecDueDate || "",
       dtDecNo: v.dtDecNo || "",
       dubaiFileDate: v.dubaiFileDate || "",
+      remark: v.remark || "",
+      note: v.note || "",
+      currency: v.currency || "USD",
+      paymentMode: v.paymentMode || "Bank Transfer",
+      itemDescription: v.itemDescription || "",
     });
     setFormErrors({});
     setIsAddModalOpen(true);
@@ -200,12 +247,41 @@ const [searchTerm, setSearchTerm] = useState("");
   const handleInputChange = (field, val) => {
     const updated = { ...formData, [field]: val };
 
-    // Auto calculate amount when carats or rate change
-    if (field === "carats" || field === "rate") {
-      const c = parseFloat(field === "carats" ? val : formData.carats);
-      const r = parseFloat(field === "rate" ? val : formData.rate);
-      if (!isNaN(c) && !isNaN(r) && c > 0 && r > 0) {
-        updated.amount = Math.round(c * r * 100) / 100;
+    // Auto calculation:
+    // Per carat = Total amount / carat 
+    // AED = Total Amount * 3.6725
+    if (field === "amount") {
+      const amt = parseFloat(val);
+      const c = parseFloat(formData.carats);
+      if (!isNaN(amt) && amt > 0) {
+        updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+        if (!isNaN(c) && c > 0) {
+          updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+        }
+      } else if (val === "") {
+        updated.aed = "";
+      }
+    } else if (field === "carats") {
+      const c = parseFloat(val);
+      const amt = parseFloat(formData.amount);
+      const r = parseFloat(formData.rate);
+      if (!isNaN(c) && c > 0) {
+        if (!isNaN(amt) && amt > 0) {
+          updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+          updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+        } else if (!isNaN(r) && r > 0) {
+          const calcAmt = Math.round(c * r * 100) / 100;
+          updated.amount = calcAmt.toFixed(2);
+          updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
+        }
+      }
+    } else if (field === "rate") {
+      const r = parseFloat(val);
+      const c = parseFloat(formData.carats);
+      if (!isNaN(r) && r > 0 && !isNaN(c) && c > 0) {
+        const calcAmt = Math.round(c * r * 100) / 100;
+        updated.amount = calcAmt.toFixed(2);
+        updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
       }
     }
 
@@ -213,12 +289,15 @@ const [searchTerm, setSearchTerm] = useState("");
     if (field === "terms" || field === "date") {
       const effectiveDate = field === "date" ? val : formData.date;
       const effectiveTerms = field === "terms" ? val : formData.terms;
-      const match = String(effectiveTerms || "").match(/\d+/);
-      if (match && effectiveDate) {
-        const days = parseInt(match[0], 10);
-        if (!isNaN(days)) {
-          const d = new Date(effectiveDate);
-          if (!isNaN(d.getTime())) {
+
+      if (effectiveTerms && effectiveDate) {
+        const termsStr = effectiveTerms.toString().toLowerCase();
+        const daysMatch = termsStr.match(/(\d+)\s*(days|day)?/);
+
+        if (daysMatch) {
+          const days = parseInt(daysMatch[1], 10);
+          if (!isNaN(days)) {
+            const d = new Date(effectiveDate);
             d.setDate(d.getDate() + days);
             updated.dueDate = d.toISOString().split("T")[0];
             updated.dueDays = days.toString();
@@ -276,47 +355,20 @@ const [searchTerm, setSearchTerm] = useState("");
     }
 
     if (editingVoucher) {
-      const updated = allVouchers.map((item) =>
-        item.id === editingVoucher.id
-          ? {
-              ...item,
-              date: formData.date,
-              pDate: formData.date,
-              partyName: effectiveParty,
-              saleParty: effectiveParty,
-              customerParty: effectiveParty,
-              invoiceNo: formData.invoiceNo,
-              terms: formData.terms,
-              dueDate: formData.dueDate,
-              dueDays: formData.dueDays,
-              carat: formData.carats,
-              carats: parseFloat(formData.carats) || 0,
-              rate: parseFloat(formData.rate) || 0,
-              perCarat: formData.rate,
-              amount: amt,
-              totalAmountDollar: formData.amount,
-              aed: formData.aed,
-              remark: formData.remark,
-              dtDecDate: formData.dtDecDate,
-              dtDecDueDate: formData.dtDecDueDate,
-              dtDecNo: formData.dtDecNo,
-              dubaiFileDate: formData.dubaiFileDate,
-              itemDescription: formData.itemDescription,
-            }
-          : item
-      );
       const updatedItem = {
         ...editingVoucher,
         voucherId: editingVoucher.voucherId || editingVoucher.id,
         date: formData.date,
+        sDate: formData.date,
         pDate: formData.date,
         partyName: effectiveParty,
-        purchaseParty: effectiveParty,
+        saleParty: effectiveParty,
+        broker: formData.broker,
+        brokerPercent: formData.brokerPercent,
         invoiceNo: formData.invoiceNo,
         terms: formData.terms,
         dueDate: formData.dueDate,
         dueDays: formData.dueDays,
-        pcs: formData.pcs,
         carat: formData.carats,
         carats: parseFloat(formData.carats) || 0,
         rate: parseFloat(formData.rate) || 0,
@@ -324,20 +376,13 @@ const [searchTerm, setSearchTerm] = useState("");
         amount: amt,
         totalAmountDollar: formData.amount,
         aed: formData.aed,
-        remark: formData.remark,
-        note: formData.note,
-        saleInvoiceNo: formData.saleInvoiceNo,
-        saleCarat: formData.saleCarat,
-        balanceCt: formData.balanceCt,
-        broker: formData.broker,
         kpcNo: formData.kpcNo,
         dtDecDate: formData.dtDecDate,
         dtDecDueDate: formData.dtDecDueDate,
         dtDecNo: formData.dtDecNo,
         dubaiFileDate: formData.dubaiFileDate,
-        dubaiTradeStatus: formData.dubaiTradeStatus,
-        dhEntry: formData.dhEntry,
-        remark2: formData.remark2,
+        remark: formData.remark,
+        note: formData.note,
         itemDescription: formData.itemDescription || `${config.category} Lot`,
       };
       await rsSignatureVoucherService.updateVoucher(updatedItem);
@@ -353,10 +398,13 @@ const [searchTerm, setSearchTerm] = useState("");
     const newVoucher = {
       id: "sig-" + Date.now(),
       date: formData.date,
+      sDate: formData.date,
       pDate: formData.date,
       entryType: config.name,
       partyName: effectiveParty,
-      purchaseParty: effectiveParty,
+      saleParty: effectiveParty,
+      broker: formData.broker,
+      brokerPercent: formData.brokerPercent,
       invoiceNo: formData.invoiceNo,
       terms: formData.terms,
       dueDate: formData.dueDate,
@@ -368,11 +416,13 @@ const [searchTerm, setSearchTerm] = useState("");
       amount: amt,
       totalAmountDollar: formData.amount,
       aed: formData.aed,
-      remark: formData.remark,
+      kpcNo: formData.kpcNo,
       dtDecDate: formData.dtDecDate,
       dtDecDueDate: formData.dtDecDueDate,
       dtDecNo: formData.dtDecNo,
       dubaiFileDate: formData.dubaiFileDate,
+      remark: formData.remark,
+      note: formData.note,
       crDr: config.crDr,
       paymentMode: formData.paymentMode,
       currency: formData.currency,
@@ -380,7 +430,6 @@ const [searchTerm, setSearchTerm] = useState("");
         formData.itemDescription || `${config.category} Lot`,
     };
 
-    const updated = [newVoucher, ...allVouchers];
     const res = await rsSignatureVoucherService.createVoucher(newVoucher);
     if (res && res.success) {
       showToast(`✓ ${config.name} entry added successfully!`);
@@ -393,28 +442,7 @@ const [searchTerm, setSearchTerm] = useState("");
     setFormData(getInitialFormData());
     setFormErrors({});
     setIsAddModalOpen(false);
-    showToast(`✓ ${config.name} entry added successfully!`);
   };
-
-  // Filtered by Search
-  const filteredEntries = useMemo(() => {
-    return typeVouchers.filter((v) => {
-      const q = searchTerm.toLowerCase();
-      return (
-        v.partyName?.toLowerCase().includes(q) ||
-        v.itemDescription?.toLowerCase().includes(q) ||
-        v.remark?.toLowerCase().includes(q) ||
-        v.invoiceNo?.toLowerCase().includes(q) ||
-        v.date?.includes(q)
-      );
-    });
-  }, [typeVouchers, searchTerm]);
-
-  const paginatedList = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return (filteredEntries || []).slice(start, start + itemsPerPage);
-  }, [filteredEntries, currentPage, itemsPerPage]);
-
 
   // Specific Stats for this page
   const stats = useMemo(() => {
@@ -449,10 +477,10 @@ const [searchTerm, setSearchTerm] = useState("");
         <div className="flex items-center gap-3">
           <Link
             to="/signature"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
-            <span>Back to Signature</span>
+            <span>Back to Signature Account</span>
           </Link>
           <span className="h-4 w-px bg-[#E0E0DB]" />
           <div className="flex items-center gap-2">
@@ -628,29 +656,46 @@ const [searchTerm, setSearchTerm] = useState("");
           {/* Entries Table */}
           <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
             <div className="overflow-x-auto firm-table-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse border border-[#E0E0DB]">
                 <thead>
                   <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Invoice No</th>
-                    <th className="py-2.5 px-3">Terms</th>
-                    <th className="py-2.5 px-3">Due Date</th>
-                    <th className="py-2.5 px-3">Party Name</th>
-                    <th className="py-2.5 px-3 text-right">Carat</th>
-                    <th className="py-2.5 px-3 text-right">Per carat</th>
-                    <th className="py-2.5 px-3 text-right">Total Amount</th>
-                    <th className="py-2.5 px-3 text-right">AED</th>
-                    <th className="py-2.5 px-3">DT Dec Date</th>
-                    <th className="py-2.5 px-3">DT Dec Due Date</th>
-                    <th className="py-2.5 px-3">DT Dec No</th>
-                    <th className="py-2.5 px-3">Dubai File Date</th>
+                    <th className="py-2.5 px-2.5 text-center border-r border-[#E0E0DB] w-9 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        title="Select all rows"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3 text-center border-r border-[#E0E0DB] whitespace-nowrap font-semibold">
+                      SR NO
+                    </th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Invoice No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Terms</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Due Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Party Name</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Broker</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Broker %</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Carat</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Per Carat</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Total Amount *</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">AED</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">KP Number</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec Due Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Dubai File Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Remark</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Note</th>
                     <th className="py-2.5 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EAEAEA]">
                   {paginatedList.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="py-12 text-center text-[#777777]">
+                      <td colSpan={21} className="py-12 text-center text-[#777777]">
                         <IconComponent
                           className="mx-auto mb-2 text-[#CCCCCC]"
                           size={28}
@@ -659,59 +704,92 @@ const [searchTerm, setSearchTerm] = useState("");
                           No {config.name} entries found
                         </p>
                         <p className="text-xs text-[#888888] mt-0.5">
-                          Use the form on the left to record your first entry.
+                          Click "Add {config.name}" to record your first entry.
                         </p>
                       </td>
                     </tr>
                   ) : (
-                    paginatedList.map((v, idx) => (
-                      <tr
-                        key={v.id || idx}
-                        className={`hover:bg-[#F9F9F7] transition-colors ${
-                          idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
-                        }`}
-                      >
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
-                          {v.date || v.pDate || "-"}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                    paginatedList.map((v, idx) => {
+                      const rowId = v.id || v.voucherId || idx;
+                      const isSelected = selectedIds.includes(rowId);
+                      return (
+                        <tr
+                          key={rowId}
+                          className={`transition-colors ${
+                            isSelected
+                              ? "bg-[#F3F4EE] hover:bg-[#ECEEE6]"
+                              : idx % 2 === 0
+                              ? "bg-white hover:bg-[#F9F9F7]"
+                              : "bg-[#FCFCFA] hover:bg-[#F9F9F7]"
+                          }`}
+                        >
+                          <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA]">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectRow(rowId)}
+                              className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                            />
+                          </td>
+                          <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA] font-mono text-xs text-[#777777] whitespace-nowrap">
+                            {(currentPage - 1) * itemsPerPage + idx + 1}
+                          </td>
+                          <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                            {v.date || v.sDate || v.pDate || "-"}
+                          </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.invoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[11px] whitespace-nowrap text-[#555555]">
                           {v.terms || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dueDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-[#111111] whitespace-nowrap">
-                          {v.partyName || v.purchaseParty || "-"}
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-semibold text-[#111111] whitespace-nowrap">
+                          {v.partyName || v.saleParty || v.customerParty || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap">
+                          {v.broker || "-"}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
+                          {v.brokerPercent ? `${v.brokerPercent}%` : "-"}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
                           {v.carat || (v.carats ? Number(v.carats).toFixed(2) : "-")}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.perCarat || (v.rate ? formatCurrency(v.rate) : "-")}
                         </td>
                         <td
-                          className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap"
+                          className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-bold whitespace-nowrap"
                           style={{ color: config.color }}
                         >
                           {v.totalAmountDollar || (v.amount ? formatCurrency(v.amount) : "-")}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.aed || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                          {v.kpcNo || v.kpNumber || "-"}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecDueDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecNo || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dubaiFileDate || "-"}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                          {v.remark || "-"}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                          {v.note || "-"}
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
@@ -739,8 +817,9 @@ const [searchTerm, setSearchTerm] = useState("");
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </tbody>
               </table>
             </div>
@@ -748,32 +827,36 @@ const [searchTerm, setSearchTerm] = useState("");
               currentPage={currentPage}
               totalItems={filteredEntries.length}
               itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-              onItemsPerPageChange={setItemsPerPage}
+              onPageChange={(page) => setCurrentPage(page)}
+              onItemsPerPageChange={(limit) => {
+                setItemsPerPage(limit);
+                setCurrentPage(1);
+              }}
             />
-
           </div>
         </div>
       </main>
 
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 bg-[#111111] text-white px-4 py-2.5 rounded-sm shadow-xl flex items-center gap-2 text-xs border border-[#333333] animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <FaCheckCircle className="text-emerald-400" size={14} />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Add/Edit Voucher Modal */}
+      {/* Modal: Add / Edit Entry (Image 3 layout for Polish Sale) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-3xl w-full p-5 shadow-2xl animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-3xl w-full p-6 shadow-2xl animate-in fade-in zoom-in duration-150 my-8">
             <div className="flex items-center justify-between border-b border-[#E0E0DB] pb-3 mb-4">
               <div className="flex items-center gap-2">
-                <IconComponent style={{ color: config.color }} size={16} />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[#111111]">
-                  {editingVoucher ? `Edit ${config.name}` : `Record New ${config.name}`}
-                </h3>
+                <div
+                  className="w-7 h-7 rounded-sm flex items-center justify-center"
+                  style={{ backgroundColor: config.bg, color: config.color }}
+                >
+                  <IconComponent size={14} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#111111]">
+                    {editingVoucher ? `Edit ${config.name} Voucher` : `New ${config.name} Voucher`}
+                  </h3>
+                  <p className="text-[11px] text-[#777777]">
+                    Fill in the transaction, parcel, and Dubai trade details
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => {
@@ -787,16 +870,14 @@ const [searchTerm, setSearchTerm] = useState("");
             </div>
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
-              <div className="space-y-3 max-h-[72vh] overflow-y-auto pr-1">
-                {/* Section 1: Sale & Invoice Details */}
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                {/* 1. Basic Details */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
-                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    1. Sale & Invoice Details
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Row 1: 4 columns for Date, Invoice No, Terms, Due Date */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Date *
+                        DATE *
                       </label>
                       <input
                         type="date"
@@ -812,11 +893,11 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Invoice No
+                        INVOICE NO
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. PS-1048"
+                        placeholder="e.g. INV-1048"
                         value={formData.invoiceNo}
                         onChange={(e) => handleInputChange("invoiceNo", e.target.value)}
                         className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
@@ -825,7 +906,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Terms (Days)
+                        TERMS (DAYS)
                       </label>
                       <input
                         type="text"
@@ -838,63 +919,74 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Due Date (Auto)
+                        DUE DATE (AUTO)
                       </label>
                       <input
-                        type="date"
-                        value={formData.dueDate}
+                        type="text"
+                        value={formData.dueDate || "dd-----yyyy"}
                         disabled
                         className="w-full bg-[#F5F5F2] text-[#555555] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs font-mono font-semibold cursor-not-allowed focus:outline-hidden"
                       />
                     </div>
+                  </div>
 
+                  {/* Row 2: Party Name, Broker, Broker % */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                     <div className="sm:col-span-2">
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Party Name *
+                        PARTY NAME *
                       </label>
-                      <select
+                      <SearchablePartySelect
                         value={formData.partyName}
-                        onChange={(e) => handleInputChange("partyName", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                        onChange={(val) => handleInputChange("partyName", val)}
+                        parties={allAvailableParties}
+                        placeholder="-- Select Party --"
                         required
-                      >
-                        <option value="">-- Select Party --</option>
-                        {allAvailableParties.map((p) => (
-                          <option key={p.id} value={p.name || p.partyName}>
-                            {p.name}
-                          </option>
-                        ))}
-                        <option value="__custom__">+ Enter Custom Party Name</option>
-                      </select>
+                        error={formErrors.partyName}
+                      />
                       {formErrors.partyName && (
                         <p className="text-[10px] text-red-600 mt-0.5">{formErrors.partyName}</p>
                       )}
+                    </div>
 
-                      {formData.partyName === "__custom__" && (
-                        <div className="mt-2">
-                          <input
-                            type="text"
-                            placeholder="Type Custom Party Name..."
-                            value={formData.customParty}
-                            onChange={(e) => handleInputChange("customParty", e.target.value)}
-                            className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                            autoFocus
-                          />
-                        </div>
-                      )}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        BROKER
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Broker name / firm"
+                        value={formData.broker}
+                        onChange={(e) => handleInputChange("broker", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        BROKER %
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g. 1.00%"
+                        value={formData.brokerPercent}
+                        onChange={(e) => handleInputChange("brokerPercent", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono focus:outline-hidden focus:border-[#111111]"
+                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Section 2: Weight & Financial Figures */}
+                {/* 2. WEIGHT & FINANCIAL FIGURES */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    2. Weight & Financial Figures
+                    2. WEIGHT & FINANCIAL FIGURES
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Carat *
+                        CARAT *
                       </label>
                       <input
                         type="number"
@@ -912,7 +1004,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Per Carat ($)
+                        PER CARAT
                       </label>
                       <input
                         type="number"
@@ -926,7 +1018,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Total Amount $ *
+                        TOTAL AMOUNT *
                       </label>
                       <input
                         type="number"
@@ -958,15 +1050,15 @@ const [searchTerm, setSearchTerm] = useState("");
                   </div>
                 </div>
 
-                {/* Section 3: Dubai Trade Tracking */}
+                {/* 3. DUBAI TRADE TRACKING */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    3. Dubai Trade Tracking
+                    3. DUBAI TRADE TRACKING
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec Date
+                        DT DEC DATE
                       </label>
                       <input
                         type="date"
@@ -978,7 +1070,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec Due Date
+                        DT DEC DUE DATE
                       </label>
                       <input
                         type="date"
@@ -990,7 +1082,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        DT Dec No
+                        DT DEC NO
                       </label>
                       <input
                         type="text"
@@ -1003,7 +1095,7 @@ const [searchTerm, setSearchTerm] = useState("");
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Dubai File Date
+                        DUBAI FILE DATE
                       </label>
                       <input
                         type="date"
@@ -1015,22 +1107,37 @@ const [searchTerm, setSearchTerm] = useState("");
                   </div>
                 </div>
 
-                {/* Section 4: Remarks */}
+                {/* 4. REMARKS & NOTES */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    4. Remarks & Narration
+                    4. REMARKS & NOTES
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                      Remark
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Remark / Terms narration..."
-                      value={formData.remark}
-                      onChange={(e) => handleInputChange("remark", e.target.value)}
-                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        REMARK
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Primary remark..."
+                        value={formData.remark}
+                        onChange={(e) => handleInputChange("remark", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
+                        NOTE
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Internal note..."
+                        value={formData.note}
+                        onChange={(e) => handleInputChange("note", e.target.value)}
+                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1090,11 +1197,11 @@ const [searchTerm, setSearchTerm] = useState("");
               <div className="bg-[#FAFAF8] border border-[#E8E8E4] p-3 rounded space-y-1.5 font-mono text-[11px]">
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Date:</span>
-                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.date}</span>
+                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.date || deleteVoucherTarget.sDate}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Party:</span>
-                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.partyName}</span>
+                  <span className="font-semibold text-[#111111]">{deleteVoucherTarget.partyName || deleteVoucherTarget.saleParty}</span>
                 </div>
                 {deleteVoucherTarget.carats > 0 && (
                   <div className="flex justify-between">
@@ -1106,18 +1213,14 @@ const [searchTerm, setSearchTerm] = useState("");
                 )}
                 <div className="flex justify-between">
                   <span className="text-[#777777]">Amount:</span>
-                  <span className="font-bold text-red-600">
+                  <span className="font-bold text-[#111111]">
                     {formatCurrency(deleteVoucherTarget.amount)}
                   </span>
                 </div>
               </div>
-
-              <p className="text-[11px] text-[#888888] italic">
-                This action cannot be undone and will update stock, ledger, and balances immediately.
-              </p>
             </div>
 
-            <div className="mt-5 flex items-center justify-end gap-2 border-t border-[#E0E0DB] pt-3">
+            <div className="flex items-center justify-end gap-2 mt-5 pt-3 border-t border-[#E0E0DB]">
               <button
                 type="button"
                 onClick={() => setDeleteVoucherTarget(null)}
@@ -1128,25 +1231,29 @@ const [searchTerm, setSearchTerm] = useState("");
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-4 py-1.5 rounded-sm bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-sm bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider shadow-2xs transition-colors cursor-pointer"
               >
-                <FaTrash size={10} />
-                <span>Delete Voucher</span>
+                Delete Voucher
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* View Voucher Details Modal */}
+      {/* Modal: View Details */}
       {selectedVoucher && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-lg w-full p-5 shadow-2xl animate-in fade-in zoom-in duration-150">
+          <div className="bg-white border border-[#D1D1CB] rounded-sm max-w-xl w-full p-6 shadow-2xl animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E0E0DB] pb-3 mb-4">
               <div className="flex items-center gap-2">
-                <IconComponent style={{ color: config.color }} size={16} />
+                <div
+                  className="w-7 h-7 rounded-sm flex items-center justify-center"
+                  style={{ backgroundColor: config.bg, color: config.color }}
+                >
+                  <IconComponent size={14} />
+                </div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-[#111111]">
-                  {selectedVoucher.entryType} Voucher Details
+                  {config.name} Voucher Details
                 </h3>
               </div>
               <button
@@ -1157,50 +1264,116 @@ const [searchTerm, setSearchTerm] = useState("");
               </button>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="grid grid-cols-2 gap-2 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4]">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Date</span>
-                  <p className="font-mono font-semibold">{selectedVoucher.date || selectedVoucher.pDate}</p>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DATE</span>
+                  <span className="font-mono font-semibold text-[#111111]">{selectedVoucher.date || selectedVoucher.sDate || selectedVoucher.pDate || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Voucher ID</span>
-                  <p className="font-mono text-[#555555]">{selectedVoucher.id}</p>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[#777777]">Party Name</span>
-                <p className="font-bold text-sm text-[#111111]">{selectedVoucher.partyName || selectedVoucher.purchaseParty}</p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Carats</span>
-                  <p className="font-mono font-bold">{selectedVoucher.carats || selectedVoucher.carat || "-"}</p>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">INVOICE NO</span>
+                  <span className="font-mono font-semibold text-[#111111]">{selectedVoucher.invoiceNo || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Rate / Ct</span>
-                  <p className="font-mono">{selectedVoucher.rate || selectedVoucher.perCarat ? formatCurrency(selectedVoucher.rate || selectedVoucher.perCarat) : "-"}</p>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">TERMS</span>
+                  <span className="text-[#111111]">{selectedVoucher.terms || "-"}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Total Amount</span>
-                  <p className="font-mono font-bold text-emerald-600">{formatCurrency(selectedVoucher.amount || selectedVoucher.totalAmountDollar)}</p>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DUE DATE</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.dueDate || "-"}</span>
                 </div>
               </div>
 
-              {selectedVoucher.remark && (
+              <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#777777]">Remarks</span>
-                  <p className="text-[#333333] bg-[#FAFAF8] p-2 rounded border border-[#E8E8E4]">{selectedVoucher.remark}</p>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">PARTY NAME</span>
+                  <span className="font-bold text-sm text-[#111111]">{selectedVoucher.partyName || selectedVoucher.saleParty || selectedVoucher.purchaseParty || "-"}</span>
+                </div>
+                {(selectedVoucher.broker || selectedVoucher.brokerPercent) && (
+                  <div className="flex items-center gap-3 text-xs">
+                    {selectedVoucher.broker && (
+                      <div>
+                        <span className="text-[10px] font-bold text-[#777777] uppercase block">BROKER</span>
+                        <span className="font-semibold text-[#111111]">{selectedVoucher.broker}</span>
+                      </div>
+                    )}
+                    {selectedVoucher.brokerPercent && (
+                      <div>
+                        <span className="text-[10px] font-bold text-[#777777] uppercase block">BROKER %</span>
+                        <span className="font-mono font-semibold text-[#111111]">{selectedVoucher.brokerPercent}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4]">
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">CARAT</span>
+                  <span className="font-mono font-bold text-[#111111]">{selectedVoucher.carat || selectedVoucher.carats || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">PER CARAT</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.perCarat || formatCurrency(selectedVoucher.rate)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">TOTAL AMOUNT *</span>
+                  <span className="font-mono font-bold" style={{ color: config.color }}>{selectedVoucher.totalAmountDollar || formatCurrency(selectedVoucher.amount)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">AED</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.aed || "-"}</span>
+                </div>
+              </div>
+
+              {(selectedVoucher.kpcNo || selectedVoucher.kpNumber) && (
+                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4]">
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">KP NUMBER</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.kpcNo || selectedVoucher.kpNumber}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4]">
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DT DEC DATE</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.dtDecDate || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DT DEC DUE DATE</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.dtDecDueDate || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DT DEC NO</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.dtDecNo || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#777777] uppercase block">DUBAI FILE DATE</span>
+                  <span className="font-mono text-[#111111]">{selectedVoucher.dubaiFileDate || "-"}</span>
+                </div>
+              </div>
+
+              {(selectedVoucher.remark || selectedVoucher.note) && (
+                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-1">
+                  {selectedVoucher.remark && (
+                    <div>
+                      <span className="text-[10px] font-bold text-[#777777] uppercase block">REMARK:</span>
+                      <span className="text-[#111111]">{selectedVoucher.remark}</span>
+                    </div>
+                  )}
+                  {selectedVoucher.note && (
+                    <div>
+                      <span className="text-[10px] font-bold text-[#777777] uppercase block">NOTE:</span>
+                      <span className="text-[#111111]">{selectedVoucher.note}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="mt-4 flex justify-end">
+            <div className="flex justify-end mt-4 pt-3 border-t border-[#E0E0DB]">
               <button
                 onClick={() => setSelectedVoucher(null)}
-                className="px-4 py-1.5 bg-[#111111] text-white text-xs font-semibold rounded-sm cursor-pointer"
+                className="px-4 py-1.5 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-semibold uppercase tracking-wider cursor-pointer"
               >
                 Close
               </button>

@@ -1,7 +1,7 @@
 import { formatDateDDMMYYYY } from "../../utils/formatUtils";
 import { Pagination } from "../../components/Pagination";
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import {
   FaBook,
   FaPlus,
@@ -31,14 +31,48 @@ import { exportToCSV, exportToExcel } from "../../utils/excelExport";
 import { rsFirmLedgerEntryService } from "../../services/rsFirmLedgerEntryService";
 import { rsFirmBookMasterService } from "../../services/rsFirmBookMasterService";
 import { rsBookTypeMasterService } from "../../services/rsBookTypeMasterService";
+import { rsPartyMasterService } from "../../services/rsPartyMasterService";
 import { BookTypeQuickModal } from "../../components/modals/BookTypeQuickModal";
 
-const FirmBookLedger = () => {
+const SIGNATURE_BANK_TYPES = [
+  "NBF - USD",
+  "NBF - AED",
+  "CASH - USD",
+  "CASH - AED",
+  "INDUSIND",
+];
+
+const DEFAULT_SIGNATURE_FIRM = {
+  id: "signature-book",
+  firmId: 6,
+  name: "Signature Book",
+  shortCode: "SGB",
+  tagline: "Bank & Cash Multi-Currency Ledger",
+  description: "Specialized multi-currency and bank ledger portal.",
+  badge: "Signature",
+  isSignatureBook: true,
+  openingBalance: 0,
+  openingBalType: "CR",
+};
+
+const FirmBookLedger = ({ isStaticSignatureBook = false }) => {
   const { firmId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [currentFirm, setCurrentFirm] = useState(() => getFirmById(firmId));
+  const isSignatureRoute =
+    Boolean(isStaticSignatureBook) ||
+    location.pathname === "/signature-book" ||
+    location.pathname.startsWith("/signature-book") ||
+    String(firmId).toLowerCase() === "signature-book" ||
+    String(firmId) === "6";
+
+  const [currentFirm, setCurrentFirm] = useState(() => {
+    if (isSignatureRoute) return DEFAULT_SIGNATURE_FIRM;
+    return getFirmById(firmId);
+  });
   const [allFirmsList, setAllFirmsList] = useState(() => getAllFirms());
+  const [allAvailableParties, setAllAvailableParties] = useState([]);
   const [records, setRecords] = useState([]);
   const [isApiConnected, setIsApiConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,17 +81,17 @@ const FirmBookLedger = () => {
   const [selectedIds, setSelectedIds] = useState([]);
 
   // Search & Filters
-    const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("All");
   const [selectedCrDr, setSelectedCrDr] = useState("All");
   const [dateFilter, setDateFilter] = useState("All");
 
   // Sorting
-  const [sortField, setSortField] = useState("date");
-  const [sortDirection, setSortDirection] = useState("desc");
+  const [sortField, setSortField] = useState("");
+  const [sortDirection, setSortDirection] = useState("asc");
 
   // Modals state
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -67,9 +101,6 @@ const [searchQuery, setSearchQuery] = useState("");
   const [bookTypeOptions, setBookTypeOptions] = useState([
     { id: "1", name: "Bank" },
     { id: "2", name: "Cash" },
-    { id: "3", name: "Angadia" },
-    { id: "4", name: "Dubai Wire" },
-    { id: "5", name: "Cheque" },
   ]);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -77,25 +108,49 @@ const [searchQuery, setSearchQuery] = useState("");
   // Toast feedback
   const [toastMessage, setToastMessage] = useState(null);
 
-  const isSignatureBook = currentFirm?.id === "signature-book" || currentFirm?.isSignatureBook;
+  const isSignatureBook =
+    isSignatureRoute ||
+    String(firmId).toLowerCase() === "signature-book" ||
+    String(firmId) === "6" ||
+    String(currentFirm?.id) === "6" ||
+    String(currentFirm?.firmId) === "6" ||
+    String(currentFirm?.id).toLowerCase() === "signature-book" ||
+    Boolean(currentFirm?.isSignatureBook) ||
+    currentFirm?.shortCode === "SGB";
 
   // Form Fields
   const initialFormState = {
+    srNo: "",
     date: new Date().toISOString().split("T")[0],
+    partyName: "",
     description: "",
+    location: "",
+    trn: "",
     bankType: "Bank",
     type: "Bank",
+    hasAed: false,
+    aed: "",
     cashUsd: "",
     cashAed: "",
     aedBank: "",
     usdBank: "",
-    aed: "",
     crDr: "CR",
     amount: "",
     remark: "",
   };
   const [formData, setFormData] = useState(initialFormState);
   const [formErrors, setFormErrors] = useState({});
+
+  const loadParties = async () => {
+    try {
+      const res = await rsPartyMasterService.getAllParties();
+      if (res && res.success && res.data) {
+        setAllAvailableParties(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to load parties in ledger", err);
+    }
+  };
 
   const loadBookTypes = async () => {
     const res = await rsBookTypeMasterService.getAllBookTypes();
@@ -112,25 +167,39 @@ const [searchQuery, setSearchQuery] = useState("");
   };
 
   const loadFirmAndEntries = async () => {
+    loadParties();
     setIsLoading(true);
-    let activeFirm = getFirmById(firmId);
+    let activeFirm = isSignatureRoute ? DEFAULT_SIGNATURE_FIRM : getFirmById(firmId);
 
     try {
       const firmRes = await rsFirmBookMasterService.getAllFirms();
       if (firmRes.success && firmRes.data && firmRes.data.length > 0) {
         setAllFirmsList(firmRes.data);
-        const search = String(firmId).toLowerCase().trim();
-        const found = firmRes.data.find((f) => {
-          if (String(f.id).toLowerCase() === search) return true;
-          if (f.firmId && String(f.firmId).toLowerCase() === search) return true;
-          if (f.shortCode && f.shortCode.toLowerCase() === search) return true;
-          if (f.name && f.name.toLowerCase() === search) return true;
-          if (f.name && f.name.toLowerCase().replace(/\s+/g, "-") === search) return true;
-          return false;
-        });
+        if (isSignatureRoute) {
+          const foundSig = firmRes.data.find(
+            (f) =>
+              String(f.id) === "6" ||
+              String(f.firmId) === "6" ||
+              String(f.shortCode).toUpperCase() === "SGB" ||
+              String(f.name).toLowerCase().includes("signature book")
+          );
+          if (foundSig) {
+            activeFirm = { ...DEFAULT_SIGNATURE_FIRM, ...foundSig };
+          }
+        } else {
+          const search = String(firmId).toLowerCase().trim();
+          const found = firmRes.data.find((f) => {
+            if (String(f.id).toLowerCase() === search) return true;
+            if (f.firmId && String(f.firmId).toLowerCase() === search) return true;
+            if (f.shortCode && f.shortCode.toLowerCase() === search) return true;
+            if (f.name && f.name.toLowerCase() === search) return true;
+            if (f.name && f.name.toLowerCase().replace(/\s+/g, "-") === search) return true;
+            return false;
+          });
 
-        if (found) {
-          activeFirm = found;
+          if (found) {
+            activeFirm = found;
+          }
         }
       }
       setCurrentFirm(activeFirm);
@@ -142,7 +211,7 @@ const [searchQuery, setSearchQuery] = useState("");
       }
     } catch (err) {
       console.error("Error loading firm and entries:", err);
-      const loaded = getFirmRecords(activeFirm?.id || firmId);
+      const loaded = getFirmRecords(activeFirm?.id || firmId || "signature-book");
       setRecords(loaded);
       setIsApiConnected(false);
     } finally {
@@ -153,8 +222,9 @@ const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     loadFirmAndEntries();
     loadBookTypes();
+    loadParties();
     setSelectedIds([]);
-  }, [firmId]);
+  }, [firmId, location.pathname]);
 
   const showToast = (msg, type = "success") => {
     setToastMessage({ msg, type });
@@ -202,7 +272,10 @@ const [searchQuery, setSearchQuery] = useState("");
         (item.remark && item.remark.toLowerCase().includes(q)) ||
         (item.date && item.date.toLowerCase().includes(q));
 
-      const matchesType = selectedType === "All" || item.type === selectedType;
+      const matchesType =
+        selectedType === "All" ||
+        item.type === selectedType ||
+        item.bankType === selectedType;
       const matchesCrDr = selectedCrDr === "All" || item.crDr === selectedCrDr;
 
       let matchesDate = true;
@@ -236,6 +309,7 @@ const [searchQuery, setSearchQuery] = useState("");
 
   // Sorted Records
   const sortedRecords = useMemo(() => {
+    if (!sortField) return filteredRecords;
     return [...filteredRecords].sort((a, b) => {
       let aVal = a[sortField];
       let bVal = b[sortField];
@@ -243,9 +317,6 @@ const [searchQuery, setSearchQuery] = useState("");
       if (sortField === "amount" || sortField === "aed" || sortField === "bal" || sortField === "runningBal") {
         aVal = Number(aVal) || 0;
         bVal = Number(bVal) || 0;
-      } else if (sortField === "date") {
-        aVal = new Date(aVal || 0).getTime();
-        bVal = new Date(bVal || 0).getTime();
       } else {
         aVal = (aVal || "").toString().toLowerCase();
         bVal = (bVal || "").toString().toLowerCase();
@@ -285,12 +356,58 @@ const [searchQuery, setSearchQuery] = useState("");
     }
   };
 
+  const handlePartyChange = (val) => {
+    const matched = allAvailableParties.find(
+      (p) => (p.name || p.partyName || "").toLowerCase() === (val || "").toLowerCase()
+    );
+    setFormData((prev) => ({
+      ...prev,
+      partyName: val,
+      description: val,
+      location: matched?.location || prev.location || "",
+      trn: matched?.trn || prev.trn || "",
+    }));
+  };
+
+  const getSignatureBreakdown = (row) => {
+    if (!row) return { cUsd: 0, cAed: 0, aBank: 0, uBank: 0 };
+    let cUsd = row.cashUsd !== undefined && row.cashUsd !== "" && Number(row.cashUsd) > 0 ? Number(row.cashUsd) : 0;
+    let cAed = row.cashAed !== undefined && row.cashAed !== "" && Number(row.cashAed) > 0 ? Number(row.cashAed) : 0;
+    let aBank = row.aedBank !== undefined && row.aedBank !== "" && Number(row.aedBank) > 0 ? Number(row.aedBank) : 0;
+    let uBank = row.usdBank !== undefined && row.usdBank !== "" && Number(row.usdBank) > 0 ? Number(row.usdBank) : 0;
+
+    if (!cUsd && !cAed && !aBank && !uBank) {
+      const amt = Number(row.amount) || (row.crDr === "CR" ? Number(row.credit) : Number(row.debit)) || Number(row.credit) || Number(row.debit) || 0;
+      const typeStr = (row.bankType || row.type || "").toUpperCase().trim();
+
+      if (typeStr.includes("CASH") && typeStr.includes("USD")) {
+        cUsd = amt;
+      } else if (typeStr.includes("CASH") && (typeStr.includes("AED") || typeStr.includes("DIRHAM"))) {
+        cAed = amt;
+      } else if (typeStr.includes("NBF - AED") || (typeStr.includes("AED") || typeStr.includes("DIRHAM"))) {
+        aBank = amt;
+      } else if (typeStr.includes("NBF - USD") || typeStr.includes("INDUSIND") || typeStr.includes("USD") || typeStr.includes("DOLLAR") || typeStr.includes("NBF") || typeStr.includes("BANK")) {
+        uBank = amt;
+      } else if (typeStr.includes("CASH")) {
+        cUsd = amt;
+      } else {
+        uBank = amt;
+      }
+    }
+
+    return { cUsd, cAed, aBank, uBank };
+  };
+
   const handleOpenAddModal = () => {
     setIsEditMode(false);
     setSelectedRecord(null);
+    const defaultType = isSignatureBook ? SIGNATURE_BANK_TYPES[0] : (bookTypeOptions[0]?.name || "Bank");
     setFormData({
       ...initialFormState,
+      srNo: records.length + 1,
       date: new Date().toISOString().split("T")[0],
+      type: defaultType,
+      bankType: defaultType,
     });
     setFormErrors({});
     setIsFormModalOpen(true);
@@ -299,18 +416,33 @@ const [searchQuery, setSearchQuery] = useState("");
   const handleOpenEditModal = (record) => {
     setIsEditMode(true);
     setSelectedRecord(record);
+    const pName = record.partyName || record.description || "";
+    const matched = allAvailableParties.find(
+      (p) => (p.name || p.partyName || "").toLowerCase() === pName.toLowerCase()
+    );
+    const breakdown = getSignatureBreakdown(record);
+    const amt = record.amount || (record.credit > 0 ? record.credit : record.debit) || (isSignatureBook ? (breakdown.cUsd || breakdown.cAed || breakdown.aBank || breakdown.uBank) : "");
+    const defaultType = isSignatureBook
+      ? (record.bankType || record.type || SIGNATURE_BANK_TYPES[0])
+      : (record.type || record.bankType || "Bank");
+
     setFormData({
+      srNo: record.srNo || ((currentPage - 1) * itemsPerPage) + 1,
       date: record.date || new Date().toISOString().split("T")[0],
-      description: record.description || record.partyName || "",
-      bankType: record.bankType || record.type || "NBF - USD",
-      type: record.type || "Bank",
+      partyName: pName,
+      description: pName,
+      location: record.location || matched?.location || "",
+      trn: record.trn || matched?.trn || "",
+      bankType: defaultType,
+      type: defaultType,
       cashUsd: record.cashUsd !== undefined ? String(record.cashUsd) : "",
       cashAed: record.cashAed !== undefined ? String(record.cashAed) : "",
       aedBank: record.aedBank !== undefined ? String(record.aedBank) : "",
       usdBank: record.usdBank !== undefined ? String(record.usdBank) : "",
+      hasAed: Boolean(record.aed && Number(record.aed) > 0),
       aed: record.aed ? String(record.aed) : "",
       crDr: record.crDr || (record.credit > 0 ? "CR" : "DR"),
-      amount: record.amount || record.credit || record.debit || "",
+      amount: amt ? String(amt) : "",
       remark: record.remark || record.remarks || "",
     });
     setFormErrors({});
@@ -345,16 +477,51 @@ const [searchQuery, setSearchQuery] = useState("");
 
     setIsLoading(true);
     try {
+      let preparedFormData = { ...formData };
+      if (isSignatureBook) {
+        const amt = Number(formData.amount) || 0;
+        const typeStr = (formData.type || formData.bankType || "").toUpperCase().trim();
+        let cashUsd = 0;
+        let cashAed = 0;
+        let aedBank = 0;
+        let usdBank = 0;
+
+        if (typeStr.includes("CASH") && typeStr.includes("USD")) {
+          cashUsd = amt;
+        } else if (typeStr.includes("CASH") && (typeStr.includes("AED") || typeStr.includes("DIRHAM"))) {
+          cashAed = amt;
+        } else if (typeStr.includes("NBF - AED") || typeStr.includes("AED") || typeStr.includes("DIRHAM")) {
+          aedBank = amt;
+        } else if (typeStr.includes("NBF - USD") || typeStr.includes("INDUSIND") || typeStr.includes("USD") || typeStr.includes("DOLLAR") || typeStr.includes("NBF") || typeStr.includes("BANK")) {
+          usdBank = amt;
+        } else if (typeStr.includes("CASH")) {
+          cashUsd = amt;
+        } else {
+          usdBank = amt;
+        }
+
+        preparedFormData = {
+          ...formData,
+          aed: 0,
+          bankType: formData.type || formData.bankType || SIGNATURE_BANK_TYPES[0],
+          type: formData.type || formData.bankType || SIGNATURE_BANK_TYPES[0],
+          cashUsd,
+          cashAed,
+          aedBank,
+          usdBank,
+        };
+      }
+
       if (isEditMode && selectedRecord) {
         const targetId = selectedRecord.entryId || selectedRecord.id;
-        const res = await rsFirmLedgerEntryService.updateEntry(targetId, currentFirm, formData);
+        const res = await rsFirmLedgerEntryService.updateEntry(targetId, currentFirm, preparedFormData);
         if (res.success) {
           showToast(res.message || "Entry updated successfully");
         } else {
           showToast(res.message || "Failed to update entry", "warning");
         }
       } else {
-        const res = await rsFirmLedgerEntryService.createEntry(currentFirm, formData);
+        const res = await rsFirmLedgerEntryService.createEntry(currentFirm, preparedFormData);
         if (res.success) {
           showToast(res.message || "New Data Entry added");
         } else {
@@ -433,7 +600,7 @@ const [searchQuery, setSearchQuery] = useState("");
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#FAFAF8] text-[#111111] font-sans flex flex-col pb-12 selection:bg-black selection:text-white">
+    <div className="h-screen w-full bg-[#FAFAF8] text-[#111111] font-sans flex flex-col overflow-hidden selection:bg-black selection:text-white">
       {/* Toast Alert */}
       {toastMessage && (
         <div
@@ -449,12 +616,12 @@ const [searchQuery, setSearchQuery] = useState("");
       )}
 
       {/* Unified Top Navigation Bar (Zero Overlap & Proportional Logo) */}
-      <div className="w-full bg-white border-b border-[#E8E8E4] px-4 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 shadow-2xs">
+      <div className="w-full bg-white border-b border-[#E8E8E4] px-4 sm:px-8 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 z-30 shadow-2xs">
         {/* Left: Back Link + Active Firm Title + Badge */}
         <div className="flex items-center gap-3">
           <Link
             to="/firms"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
             <span>All Books</span>
@@ -481,15 +648,30 @@ const [searchQuery, setSearchQuery] = useState("");
         {/* Right: Switcher + Export Buttons + Add Entry (No Print Button) */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <select
-            value={currentFirm?.id || currentFirm?.firmId || firmId}
-            onChange={(e) => navigate(`/firms/${e.target.value}`)}
+            value={isSignatureBook ? "signature-book" : (currentFirm?.id || currentFirm?.firmId || firmId)}
+            onChange={(e) => {
+              if (e.target.value === "signature-book") {
+                navigate("/signature-book");
+              } else {
+                navigate(`/firms/${e.target.value}`);
+              }
+            }}
             className="px-3 py-1.5 bg-white border border-[#D1D1CB] rounded-sm text-xs font-semibold text-[#111111] focus:border-black outline-none cursor-pointer"
           >
-            {allFirmsList.map((f) => (
-              <option key={f.id || f.firmId} value={f.id || f.firmId}>
-                {f.name} ({f.shortCode || "FRM"})
-              </option>
-            ))}
+            <option value="signature-book">Signature Book (SGB)</option>
+            {allFirmsList
+              .filter(
+                (f) =>
+                  String(f.id) !== "signature-book" &&
+                  String(f.firmId) !== "6" &&
+                  String(f.shortCode).toUpperCase() !== "SGB" &&
+                  !String(f.name || "").toLowerCase().includes("signature book")
+              )
+              .map((f) => (
+                <option key={f.id || f.firmId} value={f.id || f.firmId}>
+                  {f.name} ({f.shortCode || "FRM"})
+                </option>
+              ))}
           </select>
 
           <button
@@ -511,28 +693,19 @@ const [searchQuery, setSearchQuery] = useState("");
           </button>
 
           <button
-            onClick={() => navigate("/book-type-master")}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#F5F5F2] border border-[#D1D1CB] text-xs text-[#111111] font-semibold transition-colors cursor-pointer"
-            title="Book Type Master CRUD"
-          >
-            <FaTag size={12} className="text-[#D4A853]" />
-            <span>Book Types</span>
-          </button>
-
-          <button
             onClick={handleOpenAddModal}
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer shadow-2xs hover:shadow-xs"
           >
             <FaPlus size={10} />
-            <span>{isSignatureBook ? "Add Party" : "Add Entry"}</span>
+            <span>Add Entry</span>
           </button>
         </div>
       </div>
 
-      {/* Main Content - Full Width */}
-      <main className="flex-1 w-full px-4 sm:px-8 pt-4">
+      {/* Main Content - Full Width Fixed Height */}
+      <main className="flex-1 min-h-0 w-full px-4 sm:px-8 pt-3 pb-3 flex flex-col overflow-hidden">
         {/* KPI Compact Metric Summary Strip */}
-        <div className="bg-white border border-[#D1D1CB] rounded-sm p-2 sm:p-3 mb-3.5 shadow-2xs">
+        <div className="bg-white border border-[#D1D1CB] rounded-sm p-2 sm:p-2.5 mb-2.5 shadow-2xs shrink-0">
           <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E0E0DB]">
             {/* 1. Total Records */}
             <div className="px-3 py-1.5 sm:py-1">
@@ -566,7 +739,7 @@ const [searchQuery, setSearchQuery] = useState("");
                 Total Outflow (DR)
               </div>
               <div className="text-lg font-bold text-[#DC2626] leading-tight font-mono">
-                {formatCurrency(summary.totalDebit)}
+                {summary.totalDebit > 0 ? `-${formatCurrency(summary.totalDebit)}` : formatCurrency(summary.totalDebit)}
               </div>
               <div className="text-[10px] text-[#777777]">
                 Payments & Purchases
@@ -589,7 +762,7 @@ const [searchQuery, setSearchQuery] = useState("");
         </div>
 
         {/* Filter Toolbar - Balanced Proportions & Fixed Responsive Inputs */}
-        <div className="bg-white p-3 rounded-sm border border-[#E0E0DB] mb-3.5 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-2xs">
+        <div className="bg-white p-2.5 rounded-sm border border-[#E0E0DB] mb-2.5 flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between shadow-2xs shrink-0">
           {/* Search Input Box */}
           <div className="relative w-full md:w-80 shrink-0">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999] text-xs pointer-events-none" />
@@ -617,12 +790,18 @@ const [searchQuery, setSearchQuery] = useState("");
               onChange={(e) => setSelectedType(e.target.value)}
               className="w-full sm:w-36 px-3 py-2 bg-white border border-[#D1D1CB] rounded-sm text-xs font-medium text-[#111111] outline-none focus:border-black cursor-pointer transition-colors"
             >
-              <option value="All">All Types</option>
-              {bookTypeOptions.map((bt) => (
-                <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
-                  {bt.name}
-                </option>
-              ))}
+              <option value="All">{isSignatureBook ? "All Bank Types" : "All Types"}</option>
+              {isSignatureBook
+                ? SIGNATURE_BANK_TYPES.map((bt) => (
+                    <option key={bt} value={bt}>
+                      {bt}
+                    </option>
+                  ))
+                : bookTypeOptions.map((bt) => (
+                    <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
+                      {bt.name}
+                    </option>
+                  ))}
             </select>
 
             <select
@@ -665,11 +844,11 @@ const [searchQuery, setSearchQuery] = useState("");
         {/* =========================================================================
             GRID TABLE WITH ROW & COLUMN BORDERS AND EXACT FIELD ALIGNMENTS
         ========================================================================= */}
-        <div className="w-full bg-white border border-[#D1D1CB] rounded-sm overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto w-full">
+        <div className="flex-1 min-h-0 w-full bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden flex flex-col">
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto w-full relative">
             <table className="w-full min-w-[1000px] border-collapse text-xs">
-              {/* Table Head with Column Borders & Aligned Titles */}
-              <thead>
+              {/* Table Head with Sticky Column Borders & Aligned Titles */}
+              <thead className="sticky top-0 z-20 bg-[#F5F5F2] shadow-xs">
                 {isSignatureBook ? (
                   <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[#333333] uppercase tracking-wider text-[11px]">
                     {/* 0. Checkbox Master Select */}
@@ -683,19 +862,14 @@ const [searchQuery, setSearchQuery] = useState("");
                       />
                     </th>
 
+                    {/* 0.1 SR NO */}
+                    <th className="py-1.5 px-3 text-center border-r border-[#D1D1CB] font-semibold whitespace-nowrap">
+                      SR NO
+                    </th>
+
                     {/* 1. Date */}
-                    <th
-                      onClick={() => handleSort("date")}
-                      className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        <span>Date</span>
-                        {sortField === "date" ? (
-                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                        ) : (
-                          <FaSort className="text-[#BBBBBB]" />
-                        )}
-                      </div>
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      Date
                     </th>
 
                     {/* 2. Description */}
@@ -743,6 +917,21 @@ const [searchQuery, setSearchQuery] = useState("");
                       USD (Bank)
                     </th>
 
+                    {/* 8.1 Running Balance */}
+                    <th
+                      onClick={() => handleSort("bal")}
+                      className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>Running Balance</span>
+                        {sortField === "bal" ? (
+                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
+                        ) : (
+                          <FaSort className="text-[#BBBBBB]" />
+                        )}
+                      </div>
+                    </th>
+
                     {/* 9. Remark */}
                     <th className="py-1.5 px-3 font-semibold text-left border-r border-[#D1D1CB]">
                       Remark
@@ -766,19 +955,14 @@ const [searchQuery, setSearchQuery] = useState("");
                       />
                     </th>
 
+                    {/* 0.1 SR NO */}
+                    <th className="py-1.5 px-3 text-center border-r border-[#D1D1CB] font-semibold whitespace-nowrap">
+                      SR NO
+                    </th>
+
                     {/* 1. Date - Center */}
-                    <th
-                      onClick={() => handleSort("date")}
-                      className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
-                    >
-                      <div className="flex items-center justify-center gap-1">
-                        <span>Date</span>
-                        {sortField === "date" ? (
-                          sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
-                        ) : (
-                          <FaSort className="text-[#BBBBBB]" />
-                        )}
-                      </div>
+                    <th className="py-1.5 px-3 font-semibold text-center border-r border-[#D1D1CB] whitespace-nowrap">
+                      Date
                     </th>
 
                     {/* 2. Description - Left */}
@@ -842,7 +1026,7 @@ const [searchQuery, setSearchQuery] = useState("");
                       className="py-1.5 px-3.5 font-semibold text-right border-r border-[#D1D1CB] cursor-pointer hover:bg-[#EBEBE6] whitespace-nowrap select-none"
                     >
                       <div className="flex items-center justify-end gap-1">
-                        <span>Bal</span>
+                        <span>Running Balance</span>
                         {sortField === "bal" ? (
                           sortDirection === "asc" ? <FaSortUp className="text-black" /> : <FaSortDown className="text-black" />
                         ) : (
@@ -866,8 +1050,19 @@ const [searchQuery, setSearchQuery] = useState("");
 
               {/* Table Body with Row & Column Grid Borders and Compact Height */}
               <tbody>
-                {sortedRecords.length > 0 ? (
-                  sortedRecords.map((row) => {
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={isSignatureBook ? 13 : 11} className="py-16 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2.5">
+                        <div className="w-8 h-8 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-semibold text-[#555555]">
+                          Loading records...
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : sortedRecords.length > 0 ? (
+                  sortedRecords.map((row, index) => {
                     const isCr = row.crDr === "CR" || row.credit > 0;
                     const amountVal = row.amount || (isCr ? row.credit : row.debit) || 0;
                     const isSelected = selectedIds.includes(row.id);
@@ -887,6 +1082,11 @@ const [searchQuery, setSearchQuery] = useState("");
                             onChange={() => toggleSelectRow(row.id)}
                             className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
                           />
+                        </td>
+
+                        {/* 0.1 SR NO */}
+                        <td className="py-1.5 px-2.5 text-center border-r border-[#D1D1CB] font-mono text-xs text-[#777777] whitespace-nowrap">
+                          {((currentPage - 1) * itemsPerPage) + index + 1}
                         </td>
 
                         {/* 1. Date - Center */}
@@ -923,46 +1123,66 @@ const [searchQuery, setSearchQuery] = useState("");
 
                             {/* 5. CASH (USD) */}
                             <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
-                              {row.cashUsd && Number(row.cashUsd) > 0 ? (
-                                <span className="text-[#15803D] font-semibold">
-                                  ${Number(row.cashUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                </span>
-                              ) : (
-                                <span className="text-[#CCCCCC]">-</span>
-                              )}
+                              {(() => {
+                                const bd = getSignatureBreakdown(row);
+                                return bd.cUsd > 0 ? (
+                                  <span className="text-[#15803D] font-semibold">
+                                    ${Number(bd.cUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-[#CCCCCC]">-</span>
+                                );
+                              })()}
                             </td>
 
                             {/* 6. CASH (AED) */}
                             <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
-                              {row.cashAed && Number(row.cashAed) > 0 ? (
-                                <span className="text-[#B45309] font-semibold">
-                                  {Number(row.cashAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
-                                </span>
-                              ) : (
-                                <span className="text-[#CCCCCC]">-</span>
-                              )}
+                              {(() => {
+                                const bd = getSignatureBreakdown(row);
+                                return bd.cAed > 0 ? (
+                                  <span className="text-[#B45309] font-semibold">
+                                    {Number(bd.cAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
+                                  </span>
+                                ) : (
+                                  <span className="text-[#CCCCCC]">-</span>
+                                );
+                              })()}
                             </td>
 
                             {/* 7. AED (Bank) */}
                             <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
-                              {row.aedBank && Number(row.aedBank) > 0 ? (
-                                <span className="text-[#2563EB] font-semibold">
-                                  {Number(row.aedBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
-                                </span>
-                              ) : (
-                                <span className="text-[#CCCCCC]">-</span>
-                              )}
+                              {(() => {
+                                const bd = getSignatureBreakdown(row);
+                                return bd.aBank > 0 ? (
+                                  <span className="text-[#2563EB] font-semibold">
+                                    {Number(bd.aBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED
+                                  </span>
+                                ) : (
+                                  <span className="text-[#CCCCCC]">-</span>
+                                );
+                              })()}
                             </td>
 
                             {/* 8. USD (Bank) */}
                             <td className="py-1.5 px-3 text-right border-r border-[#D1D1CB] font-mono text-xs whitespace-nowrap">
-                              {row.usdBank && Number(row.usdBank) > 0 ? (
-                                <span className="text-[#7C3AED] font-semibold">
-                                  ${Number(row.usdBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                </span>
-                              ) : (
-                                <span className="text-[#CCCCCC]">-</span>
-                              )}
+                              {(() => {
+                                const bd = getSignatureBreakdown(row);
+                                return bd.uBank > 0 ? (
+                                  <span className="text-[#7C3AED] font-semibold">
+                                    ${Number(bd.uBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-[#CCCCCC]">-</span>
+                                );
+                              })()}
+                            </td>
+
+                            {/* 8.1 Running Balance */}
+                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs">
+                              <span className={(row.runningBal ?? row.bal ?? 0) >= 0 ? "text-[#166534]" : "text-[#DC2626]"}>
+                                {(row.runningBal ?? row.bal ?? 0) < 0 ? "-" : ""}
+                                {formatCurrency(Math.abs(row.runningBal ?? row.bal ?? 0))}
+                              </span>
                             </td>
 
                             {/* 9. Remark */}
@@ -1004,14 +1224,16 @@ const [searchQuery, setSearchQuery] = useState("");
                             {/* 6. Amount - Strictly Right Aligned */}
                             <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-semibold whitespace-nowrap text-xs">
                               <span className={isCr ? "text-[#166534]" : "text-[#991B1B]"}>
+                                {!isCr ? "- " : ""}
                                 {formatCurrency(amountVal)}
                               </span>
                             </td>
 
                             {/* 7. Bal (Running Balance) - Strictly Right Aligned */}
-                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs text-[#111111]">
-                              <span>
-                                {formatCurrency(Math.abs(row.runningBal || row.bal || 0))}
+                            <td className="py-1.5 px-3.5 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap text-xs">
+                              <span className={(row.runningBal ?? row.bal ?? 0) >= 0 ? "text-[#166534]" : "text-[#DC2626]"}>
+                                {(row.runningBal ?? row.bal ?? 0) < 0 ? "-" : ""}
+                                {formatCurrency(Math.abs(row.runningBal ?? row.bal ?? 0))}
                               </span>
                             </td>
 
@@ -1053,7 +1275,7 @@ const [searchQuery, setSearchQuery] = useState("");
                   })
                 ) : (
                   <tr>
-                    <td colSpan={isSignatureBook ? 11 : 10} className="py-10 text-center text-[#777777] text-xs">
+                    <td colSpan={isSignatureBook ? 13 : 11} className="py-10 text-center text-[#777777] text-xs">
                       No matching records found. Click "Add Entry" to create a new ledger entry.
                     </td>
                   </tr>
@@ -1084,7 +1306,20 @@ const [searchQuery, setSearchQuery] = useState("");
             </div>
 
             <form onSubmit={handleFormSubmit} className="p-5 space-y-3.5 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Row 1: SR NO + Date + Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    SR NO
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={formData.srNo || ((currentPage - 1) * itemsPerPage) + 1}
+                    className="w-full px-3 py-2 bg-[#F5F5F2] border border-[#D1D1CB] rounded-sm text-xs text-left text-[#555555] font-mono cursor-not-allowed outline-none"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
                     Date *
@@ -1094,6 +1329,7 @@ const [searchQuery, setSearchQuery] = useState("");
                     value={formData.date}
                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none"
+                    required
                   />
                   {formErrors.date && (
                     <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.date}</span>
@@ -1101,51 +1337,51 @@ const [searchQuery, setSearchQuery] = useState("");
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444]">
-                      Type *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsBookTypeQuickModalOpen(true)}
-                      className="text-[10px] font-semibold text-[#111111] hover:text-[#D4A853] underline cursor-pointer flex items-center gap-1"
-                      title="Add or Manage Book Types"
-                    >
-                      <FaTag size={9} />
-                      <span>+ Manage Types</span>
-                    </button>
-                  </div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                    {isSignatureBook ? "Bank Type *" : "Type *"}
+                  </label>
                   <select
-                    value={formData.type}
+                    value={formData.type || (isSignatureBook ? SIGNATURE_BANK_TYPES[0] : (bookTypeOptions[0]?.name || "Bank"))}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value, bankType: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer font-medium"
                   >
-                    {bookTypeOptions.map((bt) => (
-                      <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
-                        {bt.name}
-                      </option>
-                    ))}
+                    {isSignatureBook ? (
+                      SIGNATURE_BANK_TYPES.map((bt) => (
+                        <option key={bt} value={bt}>
+                          {bt}
+                        </option>
+                      ))
+                    ) : (
+                      bookTypeOptions.map((bt) => (
+                        <option key={bt.id || bt.typeId || bt.name} value={bt.name}>
+                          {bt.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
 
+              {/* Row 2: Description Input */}
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
-                  Description / Party Name *
+                  Description *
                 </label>
                 <input
                   type="text"
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Enter party name or description"
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value, partyName: e.target.value })}
+                  placeholder="Enter description"
                   className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                  required
                 />
                 {formErrors.description && (
                   <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.description}</span>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Row 3: CR / DR + Amount (+ AED if not /firms/6) in 1 Row */}
+              <div className={`grid grid-cols-1 ${isSignatureBook ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-3.5`}>
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
                     CR / DR *
@@ -1153,10 +1389,10 @@ const [searchQuery, setSearchQuery] = useState("");
                   <select
                     value={formData.crDr}
                     onChange={(e) => setFormData({ ...formData, crDr: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] outline-none cursor-pointer font-semibold"
                   >
-                    <option value="CR">CR (Credit / Inflow)</option>
-                    <option value="DR">DR (Debit / Outflow)</option>
+                    <option value="CR" className="text-[#166534] font-bold">CR</option>
+                    <option value="DR" className="text-[#DC2626] font-bold">DR</option>
                   </select>
                 </div>
 
@@ -1166,17 +1402,36 @@ const [searchQuery, setSearchQuery] = useState("");
                   </label>
                   <input
                     type="number"
+                    step="any"
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    placeholder="Enter transaction amount"
-                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                    placeholder="Enter amount"
+                    className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none font-bold"
+                    required
                   />
                   {formErrors.amount && (
                     <span className="text-[11px] text-[#DC2626] block mt-1">{formErrors.amount}</span>
                   )}
                 </div>
+
+                {!isSignatureBook && (
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
+                      AED
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formData.aed}
+                      onChange={(e) => setFormData({ ...formData, aed: e.target.value, cashAed: e.target.value, hasAed: Boolean(e.target.value) })}
+                      placeholder="AED"
+                      className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-left text-[#111111] placeholder-[#999999] outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
+              {/* Row 6: Remark */}
               <div>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#444444] mb-1">
                   Remark / Note
@@ -1252,32 +1507,37 @@ const [searchQuery, setSearchQuery] = useState("");
                     <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
                       Cash & Bank Figures
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (USD)</span>
-                        <p className="font-mono font-bold text-[#15803D]">
-                          {selectedRecord.cashUsd ? `$${Number(selectedRecord.cashUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (AED)</span>
-                        <p className="font-mono font-bold text-[#B45309]">
-                          {selectedRecord.cashAed ? `${Number(selectedRecord.cashAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-[#777777]">AED (Bank)</span>
-                        <p className="font-mono font-bold text-[#2563EB]">
-                          {selectedRecord.aedBank ? `${Number(selectedRecord.aedBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-[#777777]">USD (Bank)</span>
-                        <p className="font-mono font-bold text-[#7C3AED]">
-                          {selectedRecord.usdBank ? `$${Number(selectedRecord.usdBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
-                        </p>
-                      </div>
-                    </div>
+                    {(() => {
+                      const bd = getSignatureBreakdown(selectedRecord);
+                      return (
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (USD)</span>
+                            <p className="font-mono font-bold text-[#15803D]">
+                              {bd.cUsd > 0 ? `$${Number(bd.cUsd).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#777777]">CASH (AED)</span>
+                            <p className="font-mono font-bold text-[#B45309]">
+                              {bd.cAed > 0 ? `${Number(bd.cAed).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#777777]">AED (Bank)</span>
+                            <p className="font-mono font-bold text-[#2563EB]">
+                              {bd.aBank > 0 ? `${Number(bd.aBank).toLocaleString("en-US", { minimumFractionDigits: 2 })} AED` : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-[#777777]">USD (Bank)</span>
+                            <p className="font-mono font-bold text-[#7C3AED]">
+                              {bd.uBank > 0 ? `$${Number(bd.uBank).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "-"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 bg-[#FAFAF8] p-2.5 rounded border border-[#E8E8E4]">
@@ -1326,7 +1586,7 @@ const [searchQuery, setSearchQuery] = useState("");
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Description / Party</label>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#666666] mb-1">Description</label>
                     <input
                       type="text"
                       readOnly
@@ -1351,8 +1611,8 @@ const [searchQuery, setSearchQuery] = useState("");
                       <input
                         type="text"
                         readOnly
-                        value={formatCurrency(selectedRecord.amount || selectedRecord.credit || selectedRecord.debit)}
-                        className="w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold text-[#111111] outline-none"
+                        value={`${selectedRecord.crDr === "DR" ? "- " : ""}${formatCurrency(selectedRecord.amount || selectedRecord.credit || selectedRecord.debit)}`}
+                        className={`w-full px-3 py-2 bg-[#FAFAF8] border border-[#D1D1CB] rounded-sm text-xs text-left font-semibold outline-none ${selectedRecord.crDr === "DR" ? "text-[#991B1B]" : "text-[#166534]"}`}
                       />
                     </div>
                   </div>

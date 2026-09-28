@@ -79,8 +79,8 @@ export const resolveFirmInfo = (firmParam) => {
     } else if (strId.includes("bajrang-book") || strCode === "bjb" || strName.includes("bajrang")) {
       numericFirmId = 4;
       codeStr = "BJB";
-    } else if (strId.includes("signature-book") || strCode === "sgb" || strName.includes("signature")) {
-      numericFirmId = 5;
+    } else if (strId.includes("signature-book") || strCode === "sgb" || strName.includes("signature") || strId === "6" || strCode === "6") {
+      numericFirmId = 6;
       codeStr = "SGB";
     }
   }

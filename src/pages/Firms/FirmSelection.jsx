@@ -28,6 +28,20 @@ import { useAuth } from "../../hooks/useAuth";
 import { rsFirmBookMasterService } from "../../services/rsFirmBookMasterService";
 import { rsFirmLedgerEntryService } from "../../services/rsFirmLedgerEntryService";
 
+const STATIC_SIGNATURE_BOOK = {
+  id: "signature-book",
+  firmId: 6,
+  name: "Signature Book",
+  shortCode: "SGB",
+  tagline: "Bank & Cash Multi-Currency Ledger",
+  description: "Specialized multi-currency and bank ledger portal.",
+  badge: "Signature",
+  openingBalance: 0,
+  openingBalType: "CR",
+  isStaticSignatureBook: true,
+  customPath: "/signature-book",
+};
+
 const FirmSelection = () => {
   const navigate = useNavigate();
   const { user: authUser, logout } = useAuth();
@@ -88,7 +102,24 @@ const FirmSelection = () => {
       loadedFirms = getAllFirms();
       isApi = false;
     }
-    setFirms(loadedFirms);
+
+    // Filter out duplicate if API returned a firm with ID 6 or SGB / Signature Book
+    const otherFirms = loadedFirms.filter((f) => {
+      const idStr = String(f.id || "").toLowerCase();
+      const firmIdStr = String(f.firmId || "").toLowerCase();
+      const codeStr = String(f.shortCode || "").toUpperCase();
+      const nameStr = String(f.name || "").toLowerCase();
+      return (
+        idStr !== "6" &&
+        firmIdStr !== "6" &&
+        idStr !== "signature-book" &&
+        codeStr !== "SGB" &&
+        !nameStr.includes("signature book")
+      );
+    });
+
+    const combinedFirms = [STATIC_SIGNATURE_BOOK, ...otherFirms];
+    setFirms(combinedFirms);
     setIsApiConnected(isApi);
 
     // Fetch all entries from API database to compute live book-wise summaries
@@ -96,21 +127,35 @@ const FirmSelection = () => {
     const allApiEntries = allEntriesRes.success ? allEntriesRes.data : [];
 
     const statsObj = {};
-    loadedFirms.forEach((firm) => {
-      const targetFirmId = firm.firmId || firm.id;
-      const targetShortCode = (firm.shortCode || "").toUpperCase();
-      const targetSlug = (firm.id || "").toLowerCase();
-
+    combinedFirms.forEach((firm) => {
+      const isSig = firm.isStaticSignatureBook || String(firm.id) === "signature-book";
       let firmEntries = [];
-      if (allApiEntries.length > 0) {
-        firmEntries = allApiEntries.filter((item) => {
-          if (targetFirmId && Number(item.firmId) === Number(targetFirmId)) return true;
-          if (targetShortCode && String(item.firmCode).toUpperCase() === targetShortCode) return true;
-          if (targetSlug && String(item.firmCode).toLowerCase() === targetSlug) return true;
-          return false;
-        });
+      if (isSig) {
+        if (allApiEntries.length > 0) {
+          firmEntries = allApiEntries.filter((item) => {
+            if (Number(item.firmId) === 6) return true;
+            if (String(item.firmCode).toUpperCase() === "SGB") return true;
+            if (String(item.firmCode).toLowerCase() === "signature-book") return true;
+            return false;
+          });
+        } else {
+          firmEntries = getFirmRecords("signature-book");
+        }
       } else {
-        firmEntries = getFirmRecords(firm.id);
+        const targetFirmId = firm.firmId || firm.id;
+        const targetShortCode = (firm.shortCode || "").toUpperCase();
+        const targetSlug = (firm.id || "").toLowerCase();
+
+        if (allApiEntries.length > 0) {
+          firmEntries = allApiEntries.filter((item) => {
+            if (targetFirmId && Number(item.firmId) === Number(targetFirmId)) return true;
+            if (targetShortCode && String(item.firmCode).toUpperCase() === targetShortCode) return true;
+            if (targetSlug && String(item.firmCode).toLowerCase() === targetSlug) return true;
+            return false;
+          });
+        } else {
+          firmEntries = getFirmRecords(firm.id);
+        }
       }
 
       const summary = calculateFirmSummary(firmEntries);
@@ -379,83 +424,16 @@ const FirmSelection = () => {
               <span>Party Master</span>
             </button>
             <button
-              onClick={() => navigate("/book-type-master")}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-white hover:bg-[#F5F5F2] border border-[#D1D1CB] text-[#111111] text-xs font-semibold uppercase tracking-wider shrink-0 transition-colors cursor-pointer shadow-2xs"
-              title="Open Book Type Master"
-            >
-              <FaTag size={11} />
-              <span>Book Type Master</span>
-            </button>
-            <button
               onClick={() => navigate("/signature")}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-white hover:bg-[#F5F5F2] border border-[#D1D1CB] text-[#111111] text-xs font-semibold uppercase tracking-wider shrink-0 transition-colors cursor-pointer shadow-2xs"
-              title="Open Signature"
+              title="Open Signature Account"
             >
               <FaFileSignature size={11} />
-              <span>Signature</span>
+              <span>Signature Account</span>
             </button>
           </div>
         </div>
 
-        {/* Compact Balanced Metric Summary Strip */}
-        <div className="bg-white border border-[#D1D1CB] rounded-sm p-2 sm:p-3 mb-5 shadow-2xs">
-          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#E0E0DB]">
-            {/* 1. Active Portals */}
-            <div className="flex items-center gap-3 px-3 py-2 sm:py-1">
-              <div className="w-9 h-9 rounded-sm bg-[#F5F5F2] border border-[#E0E0DB] flex items-center justify-center text-[#111111] shrink-0">
-                <FaBuilding size={14} />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold tracking-wider text-[#777777]">
-                  Active Portals
-                </div>
-                <div className="text-base font-bold text-[#111111] leading-tight">
-                  {firms.length} Firm {firms.length === 1 ? "Book" : "Books"}
-                </div>
-                <div className="text-[10px] text-[#888888] truncate max-w-xs sm:max-w-sm">
-                  {firms.map((f) => f.shortCode || f.name).slice(0, 6).join(" • ")}
-                  {firms.length > 6 ? "..." : ""}
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Total Inflow */}
-            <div className="flex items-center gap-3 px-3 py-2 sm:py-1">
-              <div className="w-9 h-9 rounded-sm bg-[#F0FDF4] border border-[#DCFCE7] flex items-center justify-center text-[#16A34A] shrink-0">
-                <FaExchangeAlt size={14} />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold tracking-wider text-[#166534]">
-                  Total Inflow (CR)
-                </div>
-                <div className="text-base font-bold text-[#16A34A] leading-tight">
-                  {formatCurrency(consolidatedStats.totalCredit)}
-                </div>
-                <div className="text-[10px] text-[#777777]">
-                  All Recorded Sales & Receipts
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Total Recorded Entries */}
-            <div className="flex items-center gap-3 px-3 py-2 sm:py-1">
-              <div className="w-9 h-9 rounded-sm bg-[#F5F5F2] border border-[#E0E0DB] flex items-center justify-center text-[#111111] shrink-0">
-                <FaBook size={14} />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold tracking-wider text-[#777777]">
-                  Total Recorded Entries
-                </div>
-                <div className="text-base font-bold text-[#111111] leading-tight">
-                  {consolidatedStats.totalCount} Vouchers
-                </div>
-                <div className="text-[10px] text-[#888888]">
-                  Consolidated Ledger History
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Firm Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
@@ -484,7 +462,7 @@ const FirmSelection = () => {
                       <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-xs bg-[#F5F5F2] text-[#444444] border border-[#E8E8E4] shrink-0">
                         {firm.shortCode}
                       </span>
-                      {firm.firmId && (
+                      {firm.firmId && !firm.isStaticSignatureBook && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => handleOpenEditModal(firm, e)}
@@ -530,7 +508,7 @@ const FirmSelection = () => {
                     <div className="flex justify-between">
                       <span className="text-[#777777]">Outflow (DR):</span>
                       <span className="font-semibold text-[#DC2626]">
-                        {formatCurrency(stats.totalDebit)}
+                        {stats.totalDebit > 0 ? `-${formatCurrency(stats.totalDebit)}` : formatCurrency(stats.totalDebit)}
                       </span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-[#E8E8E4]">
@@ -543,7 +521,7 @@ const FirmSelection = () => {
                 </div>
 
                 <Link
-                  to={`/firms/${firm.id}`}
+                  to={firm.customPath || `/firms/${firm.id}`}
                   className="w-full py-1.5 px-3 rounded-sm bg-[#111111] hover:bg-black text-white text-xs font-medium uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <span>Open {firm.name}</span>

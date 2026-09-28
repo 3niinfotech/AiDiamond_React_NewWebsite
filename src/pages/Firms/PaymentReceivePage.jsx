@@ -2,6 +2,7 @@ import { formatDateDDMMYYYY } from "../../utils/formatUtils";
 import { Pagination } from "../../components/Pagination";
 import { rsPartyMasterService } from "../../services/rsPartyMasterService";
 import { rsSignatureVoucherService } from "../../services/rsSignatureVoucherService";
+import { SearchablePartySelect } from "../../components/SearchablePartySelect";
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -62,7 +63,7 @@ const PaymentReceivePage = () => {
     loadParties();
     setIsLoading(true);
     try {
-      const typeName = config?.name || "Payment Receive";
+      const typeName = voucherConfig?.name || "Payment Receive";
       const res = await rsSignatureVoucherService.getVouchersByType(typeName);
       if (res && res.success) {
         setAllVouchers(res.data);
@@ -104,17 +105,9 @@ const PaymentReceivePage = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
   const [deleteVoucherTarget, setDeleteVoucherTarget] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-
-  const paginatedList = useMemo(() => {
-    const list = typeof filteredEntries !== 'undefined' ? filteredEntries : [];
-    const start = (currentPage - 1) * itemsPerPage;
-    return list.slice(start, start + itemsPerPage);
-  }, [typeof filteredEntries !== 'undefined' ? filteredEntries : null, currentPage, itemsPerPage]);
-
-
-const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -200,6 +193,14 @@ const [searchTerm, setSearchTerm] = useState("");
 
   const handleInputChange = (field, val) => {
     const updated = { ...formData, [field]: val };
+    if (field === "amount") {
+      const amt = parseFloat(val);
+      if (!isNaN(amt) && amt > 0) {
+        updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+      } else if (val === "") {
+        updated.aed = "";
+      }
+    }
     if (field === "dpmsrDueDate") {
       if (val) {
         const due = new Date(val);
@@ -429,6 +430,28 @@ const [searchTerm, setSearchTerm] = useState("");
     );
   }, [typeVouchers, searchTerm]);
 
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return (filteredVouchers || []).slice(start, start + itemsPerPage);
+  }, [filteredVouchers, currentPage, itemsPerPage]);
+
+  // Checkbox selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedList.length && paginatedList.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedList.map((v, i) => v.id || v.voucherId || i));
+    }
+  };
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+  const isAllSelected =
+    paginatedList.length > 0 && selectedIds.length === paginatedList.length;
+
   const stats = useMemo(() => {
     const totalAmount = typeVouchers.reduce((acc, v) => acc + (Number(v.amount) || 0), 0);
     const count = typeVouchers.length;
@@ -476,10 +499,10 @@ const [searchTerm, setSearchTerm] = useState("");
         <div className="flex items-center gap-3">
           <Link
             to="/signature"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
-            <span>Back to Signature</span>
+            <span>Back to Signature Account</span>
           </Link>
           <span className="h-4 w-px bg-[#E0E0DB]" />
           <div className="flex items-center gap-2">
@@ -657,66 +680,97 @@ const [searchTerm, setSearchTerm] = useState("");
         {/* Standalone Payment Receive Table */}
         <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-xs border-collapse border border-[#E0E0DB]">
               <thead>
                 <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">
-                  <th className="py-2.5 px-3">P.Date</th>
-                  <th className="py-2.5 px-3">Party Name</th>
-                  <th className="py-2.5 px-3 text-right">Received Amount</th>
-                  <th className="py-2.5 px-3 text-center">Payment Mode</th>
-                  <th className="py-2.5 px-3">Against Invoice</th>
-                  <th className="py-2.5 px-3 text-right">AED</th>
-                  <th className="py-2.5 px-3">DPMSR No</th>
-                  <th className="py-2.5 px-3">Report Date</th>
-                  <th className="py-2.5 px-3">DPMSR Due Date</th>
-                  <th className="py-2.5 px-3 text-center">Days Left</th>
-                  <th className="py-2.5 px-3 text-center">DPMSR Print</th>
+                  <th className="py-2.5 px-2.5 text-center border-r border-[#E0E0DB] w-9 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                      title="Select all rows"
+                    />
+                  </th>
+                  <th className="py-2.5 px-3 text-center border-r border-[#E0E0DB] whitespace-nowrap font-semibold">
+                    SR NO
+                  </th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">P.Date</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Party Name</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Received Amount</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-center">Payment Mode</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Against Invoice</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">AED</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DPMSR No</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Report Date</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DPMSR Due Date</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-center">Days Left</th>
+                  <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-center">DPMSR Print</th>
                   <th className="py-2.5 px-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAEA]">
-                {filteredVouchers.length === 0 ? (
+                {paginatedList.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="text-center py-10 text-xs text-[#888888]">
+                    <td colSpan={14} className="text-center py-10 text-xs text-[#888888]">
                       No {voucherConfig.name} vouchers found. Click "Add Payment Receive" to create one.
                     </td>
                   </tr>
                 ) : (
-                  filteredVouchers.map((v, idx) => (
-                    <tr key={v.id || idx} className="hover:bg-[#F9F9F7] transition-colors">
-                      <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#444444]">
+                  paginatedList.map((v, idx) => {
+                    const rowId = v.id || v.voucherId || idx;
+                    const isSelected = selectedIds.includes(rowId);
+                    return (
+                    <tr
+                      key={v.id || idx}
+                      className={`hover:bg-[#F9F9F7] transition-colors ${
+                        isSelected ? "bg-amber-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
+                      }`}
+                    >
+                      <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA]">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRow(rowId)}
+                          className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        />
+                      </td>
+                      <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA] font-mono text-xs text-[#777777] whitespace-nowrap">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </td>
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#444444]">
                         {v.pDate || v.date || "-"}
                       </td>
-                      <td className="py-2 px-3 font-semibold text-[#111111] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-semibold text-[#111111] whitespace-nowrap">
                         {v.partyName || "-"}
                       </td>
                       <td
-                        className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap"
+                        className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-bold whitespace-nowrap"
                         style={{ color: voucherConfig.color }}
                       >
                         {formatCurrency(v.amount)}
                       </td>
-                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] text-center whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded text-[10px] bg-[#F0F0EC] text-[#555555] border border-[#E0E0DB]">
                           {v.paymentMode || "Bank Transfer"}
                         </span>
                       </td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#444444] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] text-[#444444] whitespace-nowrap">
                         {v.againstInvoice || v.invoiceNo || "-"}
                       </td>
-                      <td className="py-2 px-3 text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
                         {v.aed ? `AED ${Number(v.aed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
                       </td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#444444] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] text-[#444444] whitespace-nowrap">
                         {v.dpmsrNo || "-"}
                       </td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#555555] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] text-[#555555] whitespace-nowrap">
                         {v.reportDate || "-"}
                       </td>
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#555555] whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] text-[#555555] whitespace-nowrap">
                         {v.dpmsrDueDate || "-"}
                       </td>
-                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] text-center whitespace-nowrap">
                         {(() => {
                           const dl = getDaysLeft(v);
                           if (dl === "-") return <span className="text-[#888888]">-</span>;
@@ -735,7 +789,7 @@ const [searchTerm, setSearchTerm] = useState("");
                           );
                         })()}
                       </td>
-                      <td className="py-2 px-3 text-center whitespace-nowrap">
+                      <td className="py-2 px-3 border-r border-[#EAEAEA] text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handlePrintDpmsr(v)}
@@ -772,11 +826,19 @@ const [searchTerm, setSearchTerm] = useState("");
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredVouchers.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={setItemsPerPage}
+          />
         </div>
       </main>
 
@@ -829,36 +891,14 @@ const [searchTerm, setSearchTerm] = useState("");
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
                       Party Name *
                     </label>
-                    <select
+                    <SearchablePartySelect
                       value={formData.partyName}
-                      onChange={(e) => handleInputChange("partyName", e.target.value)}
-                      className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                      onChange={(val) => handleInputChange("partyName", val)}
+                      parties={allAvailableParties}
+                      error={formErrors.partyName}
                       required
-                    >
-                      <option value="">-- Select Party --</option>
-                      {allAvailableParties.map((p) => (
-                        <option key={p.id} value={p.name || p.partyName}>
-                          {p.name}
-                        </option>
-                      ))}
-                      <option value="__custom__">+ Enter Custom Party Name</option>
-                    </select>
-                    {formErrors.partyName && (
-                      <p className="text-[10px] text-red-600 mt-0.5">{formErrors.partyName}</p>
-                    )}
-
-                    {formData.partyName === "__custom__" && (
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          placeholder="Type Custom Party Name..."
-                          value={formData.customParty}
-                          onChange={(e) => handleInputChange("customParty", e.target.value)}
-                          className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                          autoFocus
-                        />
-                      </div>
-                    )}
+                      placeholder="Search party by name, code, location..."
+                    />
                   </div>
                 </div>
               </div>
@@ -897,11 +937,7 @@ const [searchTerm, setSearchTerm] = useState("");
                       className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
                     >
                       <option value="Bank Transfer">Bank Transfer</option>
-                      <option value="Cheque">Cheque</option>
                       <option value="Cash">Cash</option>
-                      <option value="Dubai Wire">Dubai Wire</option>
-                      <option value="Angadia">Angadia</option>
-                      <option value="Other">Other</option>
                     </select>
                   </div>
 

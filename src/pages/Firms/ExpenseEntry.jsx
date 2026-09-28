@@ -352,6 +352,22 @@ const [searchTerm, setSearchTerm] = useState("");
     return (filteredEntries || []).slice(start, start + itemsPerPage);
   }, [filteredEntries, currentPage, itemsPerPage]);
 
+  // Checkbox selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedList.length && paginatedList.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedList.map((v, i) => v.id || v.voucherId || i));
+    }
+  };
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+  const isAllSelected =
+    paginatedList.length > 0 && selectedIds.length === paginatedList.length;
 
   // Specific Stats for this page
   const stats = useMemo(() => {
@@ -383,10 +399,10 @@ const [searchTerm, setSearchTerm] = useState("");
         <div className="flex items-center gap-3">
           <Link
             to="/signature"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
-            <span>Back to Signature</span>
+            <span>Back to Signature Account</span>
           </Link>
           <span className="h-4 w-px bg-[#E0E0DB]" />
           <div className="flex items-center gap-2">
@@ -560,25 +576,37 @@ const [searchTerm, setSearchTerm] = useState("");
           {/* Entries Table */}
           <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
             <div className="overflow-x-auto firm-table-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse border border-[#E0E0DB]">
                 <thead>
                   <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Invoice No</th>
-                    <th className="py-2.5 px-3">Company Name</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">Ref Document No</th>
-                    <th className="py-2.5 px-3">Service Type</th>
-                    <th className="py-2.5 px-3 text-right">AED</th>
-                    <th className="py-2.5 px-3 text-right">Amount $</th>
-                    <th className="py-2.5 px-3">REMARK</th>
+                    <th className="py-2.5 px-2.5 text-center border-r border-[#E0E0DB] w-9 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        title="Select all rows"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3 text-center border-r border-[#E0E0DB] whitespace-nowrap font-semibold">
+                      SR NO
+                    </th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Invoice No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Company Name</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Description</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Ref Document No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Service Type</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">AED</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Amount $</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">REMARK</th>
                     <th className="py-2.5 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EAEAEA]">
                   {paginatedList.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-[#777777]">
+                      <td colSpan={12} className="py-12 text-center text-[#777777]">
                         <IconComponent
                           className="mx-auto mb-2 text-[#CCCCCC]"
                           size={28}
@@ -592,38 +620,52 @@ const [searchTerm, setSearchTerm] = useState("");
                       </td>
                     </tr>
                   ) : (
-                    paginatedList.map((v, idx) => (
+                    paginatedList.map((v, idx) => {
+                      const rowId = v.id || v.voucherId || idx;
+                      const isSelected = selectedIds.includes(rowId);
+                      return (
                       <tr
                         key={v.id || idx}
                         className={`hover:bg-[#F9F9F7] transition-colors ${
-                          idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
+                          isSelected ? "bg-amber-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
                         }`}
                       >
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA]">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(rowId)}
+                            className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                          />
+                        </td>
+                        <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA] font-mono text-xs text-[#777777] whitespace-nowrap">
+                          {(currentPage - 1) * itemsPerPage + idx + 1}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.date || v.pDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.invoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-[#111111] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-semibold text-[#111111] whitespace-nowrap">
                           {v.companyName || v.partyName || v.purchaseParty || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap max-w-[180px] truncate">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[180px] truncate">
                           {v.description || v.itemDescription || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.refDocumentNo || v.jobNo || v.saleInvoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] whitespace-nowrap text-[#555555]">
                           {v.serviceType || v.expenseType || v.expenseHead || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.aed || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap text-[#DC2626]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-bold whitespace-nowrap text-[#DC2626]">
                           {v.amount ? formatCurrency(v.amount) : (v.totalAmountDollar ? formatCurrency(v.totalAmountDollar) : "-")}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
                           {v.remark || "-"}
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
@@ -652,7 +694,8 @@ const [searchTerm, setSearchTerm] = useState("");
                           </div>
                         </td>
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>

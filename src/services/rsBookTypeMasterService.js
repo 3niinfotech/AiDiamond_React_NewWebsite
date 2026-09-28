@@ -1,12 +1,9 @@
 const DEFAULT_BOOK_TYPES = [
   { id: "1", typeId: 1, name: "Bank", shortCode: "BNK", description: "Bank Account Transfer / Wire", isActive: true },
   { id: "2", typeId: 2, name: "Cash", shortCode: "CSH", description: "Cash Payment or Receipt", isActive: true },
-  { id: "3", typeId: 3, name: "Angadia", shortCode: "ANG", description: "Angadia Courier Courier Transfer", isActive: true },
-  { id: "4", typeId: 4, name: "Dubai Wire", shortCode: "DXB", description: "Dubai International Wire Transfer", isActive: true },
-  { id: "5", typeId: 5, name: "Cheque", shortCode: "CHQ", description: "Bank Cheque Clearing", isActive: true },
 ];
 
-const STORAGE_KEY = "royal_rays_book_types_v1";
+const STORAGE_KEY = "royal_rays_book_types_v2";
 
 const getLocalBookTypes = () => {
   if (typeof window === "undefined") return DEFAULT_BOOK_TYPES;

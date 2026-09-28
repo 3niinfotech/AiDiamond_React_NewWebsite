@@ -52,6 +52,7 @@ const normalizePartyItem = (item) => {
   const partyName = item.PartyName ?? item.partyName ?? item.name ?? "";
   const shortCode = item.ShortCode ?? item.shortCode ?? "PRT";
   const address = item.Address ?? item.address ?? "";
+  const location = item.Location ?? item.location ?? "";
   const trn = item.TRN ?? item.trn ?? "";
   const email = item.Email ?? item.email ?? "";
   const contact = item.Contact ?? item.contact ?? "";
@@ -62,6 +63,7 @@ const normalizePartyItem = (item) => {
     name: partyName,
     shortCode,
     address,
+    location,
     trn,
     email,
     contact,
@@ -132,6 +134,7 @@ export const rsPartyMasterService = {
       PartyName: formData.partyName.trim(),
       ShortCode: formData.shortCode || "",
       Address: formData.address ? formData.address.trim() : "",
+      Location: formData.location ? formData.location.trim() : "",
       TRN: formData.trn ? formData.trn.trim() : "",
       Email: formData.email ? formData.email.trim() : "",
       Contact: formData.contact ? formData.contact.trim() : "",
@@ -175,6 +178,7 @@ export const rsPartyMasterService = {
       description: formData.address?.trim() || formData.email?.trim() || "Registered party ledger account.",
       badge: "Party Book",
       address: formData.address?.trim() || "",
+      location: formData.location?.trim() || "",
       trn: formData.trn?.trim() || "",
       email: formData.email?.trim() || "",
       contact: formData.contact?.trim() || "",
@@ -199,6 +203,7 @@ export const rsPartyMasterService = {
         PartyName: formData.partyName.trim(),
         ShortCode: formData.shortCode || "",
         Address: formData.address ? formData.address.trim() : "",
+        Location: formData.location ? formData.location.trim() : "",
         TRN: formData.trn ? formData.trn.trim() : "",
         Email: formData.email ? formData.email.trim() : "",
         Contact: formData.contact ? formData.contact.trim() : "",
@@ -239,6 +244,7 @@ export const rsPartyMasterService = {
       tagline: formData.trn?.trim() ? `TRN: ${formData.trn.trim()}` : formData.contact?.trim() ? `Contact: ${formData.contact.trim()}` : "Party Ledger Account",
       description: formData.address?.trim() || formData.email?.trim() || "Registered party ledger account.",
       address: formData.address?.trim() || "",
+      location: formData.location?.trim() || "",
       trn: formData.trn?.trim() || "",
       email: formData.email?.trim() || "",
       contact: formData.contact?.trim() || "",
@@ -247,6 +253,7 @@ export const rsPartyMasterService = {
     updateFirm(partyId, updatedFields);
     return { success: true, isFallback: true };
   },
+
 
   /**
    * Delete a party master record (RS_PartyMaster/Delete/{id})

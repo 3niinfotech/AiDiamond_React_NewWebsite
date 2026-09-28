@@ -81,11 +81,28 @@ export const getAllFirms = () => {
   return [...FIRMS_CONFIG, ...custom];
 };
 
+export const STATIC_SIGNATURE_FIRM = {
+  id: "signature-book",
+  firmId: 6,
+  name: "Signature Book",
+  shortCode: "SGB",
+  tagline: "Bank & Cash Multi-Currency Ledger",
+  description: "Specialized multi-currency and bank ledger portal.",
+  badge: "Signature",
+  isSignatureBook: true,
+  openingBalance: 0,
+  openingBalType: "CR",
+};
+
 export const getFirmById = (firmId) => {
-  if (!firmId) return FIRMS_CONFIG[0];
-  const all = getAllFirms();
+  if (!firmId) return FIRMS_CONFIG[0] || STATIC_SIGNATURE_FIRM;
   const searchStr = String(firmId).toLowerCase().trim();
 
+  if (searchStr === "signature-book" || searchStr === "6" || searchStr === "sgb" || searchStr.includes("signature")) {
+    return STATIC_SIGNATURE_FIRM;
+  }
+
+  const all = getAllFirms();
   const found = all.find((f) => {
     if (String(f.id).toLowerCase() === searchStr) return true;
     if (f.firmId && String(f.firmId).toLowerCase() === searchStr) return true;
@@ -95,7 +112,7 @@ export const getFirmById = (firmId) => {
     return false;
   });
 
-  return found || all[0];
+  return found || all[0] || STATIC_SIGNATURE_FIRM;
 };
 
 /**

@@ -270,14 +270,41 @@ const [searchQuery, setSearchQuery] = useState("");
         setIsModalOpen(true);
     };
 
-    // Auto calculate amount from carats and rate
+    // Auto calculate amount, per carat rate, and AED
     const handleCaratOrRateChange = (field, value) => {
         const updated = { ...modalFormData, [field]: value };
-        const cts = field === "carats" ? Number(value) : Number(modalFormData.carats);
-        const rt = field === "rate" ? Number(value) : Number(modalFormData.rate);
-
-        if (cts > 0 && rt > 0 && !modalFormData.amount) {
-            updated.amount = (cts * rt).toFixed(0);
+        if (field === "amount") {
+            const amt = parseFloat(value);
+            const c = parseFloat(modalFormData.carats);
+            if (!isNaN(amt) && amt > 0) {
+                updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+                if (!isNaN(c) && c > 0) {
+                    updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+                }
+            } else if (value === "") {
+                updated.aed = "";
+            }
+        } else if (field === "carats") {
+            const c = parseFloat(value);
+            const amt = parseFloat(modalFormData.amount);
+            const r = parseFloat(modalFormData.rate);
+            if (!isNaN(c) && c > 0) {
+                if (!isNaN(amt) && amt > 0) {
+                    updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+                } else if (!isNaN(r) && r > 0) {
+                    const calcAmt = Math.round(c * r * 100) / 100;
+                    updated.amount = calcAmt.toFixed(2);
+                    updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
+                }
+            }
+        } else if (field === "rate") {
+            const r = parseFloat(value);
+            const c = parseFloat(modalFormData.carats);
+            if (!isNaN(r) && r > 0 && !isNaN(c) && c > 0) {
+                const calcAmt = Math.round(c * r * 100) / 100;
+                updated.amount = calcAmt.toFixed(2);
+                updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
+            }
         }
         setModalFormData(updated);
     };
@@ -718,152 +745,6 @@ const [searchQuery, setSearchQuery] = useState("");
                                 })}
                             </div>
                         </div>
-
-                        {/* Filter Toolbar */}
-                        <div className="bg-white p-3 rounded-sm border border-[#E0E0DB] flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-2xs">
-                            <div className="relative w-full md:w-80 shrink-0">
-                                <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999999] text-xs pointer-events-none" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search Party, Voucher, Item..."
-                                    className="w-full pl-9 pr-7 py-1.5 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs text-[#111111] placeholder-[#999999] outline-none"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery("")}
-                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#999999] hover:text-black cursor-pointer"
-                                    >
-                                        <FaTimes size={11} />
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-                                <button
-                                    onClick={() => setSelectedEntryFilter("All")}
-                                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-xs border transition-colors shrink-0 cursor-pointer ${selectedEntryFilter === "All"
-                                        ? "bg-[#111111] text-white border-black"
-                                        : "bg-[#F5F5F2] text-[#555555] border-[#E0E0DB] hover:bg-[#EBEBE6]"
-                                        }`}
-                                >
-                                    All Entries ({vouchers.length})
-                                </button>
-                                {ENTRY_TYPES.map((et) => (
-                                    <button
-                                        key={et.id}
-                                        onClick={() => setSelectedEntryFilter(et.name)}
-                                        className={`px-2 py-1 text-[10px] font-semibold rounded-xs border transition-colors shrink-0 cursor-pointer ${selectedEntryFilter === et.name
-                                            ? "bg-[#111111] text-white border-black"
-                                            : "bg-[#FAFAF8] text-[#555555] border-[#E0E0DB] hover:bg-[#EBEBE6]"
-                                            }`}
-                                    >
-                                        {et.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Vouchers Table */}
-                        <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse text-left">
-                                    <thead>
-                                        <tr className="bg-[#F5F5F2] border-b border-[#D1D1CB] text-[11px] font-bold uppercase tracking-wider text-[#444444]">
-                                            <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB] w-24">Date</th>
-                                            <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB] w-32">Entry Type</th>
-                                            <th className="py-2.5 px-4 border-r border-[#D1D1CB]">Party / Account</th>
-                                            <th className="py-2.5 px-4 border-r border-[#D1D1CB]">Item Description</th>
-                                            <th className="py-2.5 px-3 text-right border-r border-[#D1D1CB] w-20">Carats</th>
-                                            <th className="py-2.5 px-3 text-right border-r border-[#D1D1CB] w-24">Rate/Ct</th>
-                                            <th className="py-2.5 px-4 text-right border-r border-[#D1D1CB] w-32">Amount</th>
-                                            <th className="py-2.5 px-3 text-center border-r border-[#D1D1CB] w-16">CR/DR</th>
-                                            <th className="py-2.5 px-3 text-center w-20">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-[#EAEAE6] text-xs">
-                                        {paginatedList.length > 0 ? (
-                                            paginatedList.map((row) => {
-                                                const isCr = row.crDr === "CR";
-                                                return (
-                                                    <tr key={row.id} className="hover:bg-[#FAFAF8] transition-colors">
-                                                        <td className="py-2 px-3 text-center border-r border-[#D1D1CB] font-mono text-[#444444] whitespace-nowrap">
-                                                            {formatDateDDMMYYYY(row.date)}
-                                                        </td>
-                                                        <td className="py-2 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap">
-                                                            <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-xs bg-[#F5F5F2] text-[#333333] border border-[#E0E0DB]">
-                                                                {row.entryType}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-2 px-4 border-r border-[#D1D1CB] font-semibold text-[#111111]">
-                                                            {row.partyName}
-                                                        </td>
-                                                        <td className="py-2 px-4 border-r border-[#D1D1CB] text-[#555555] max-w-xs truncate" title={row.itemDescription}>
-                                                            {row.itemDescription}
-                                                        </td>
-                                                        <td className="py-2 px-3 text-right border-r border-[#D1D1CB] font-mono text-[#333333]">
-                                                            {row.carats > 0 ? Number(row.carats).toFixed(2) : "-"}
-                                                        </td>
-                                                        <td className="py-2 px-3 text-right border-r border-[#D1D1CB] font-mono text-[#333333]">
-                                                            {row.rate > 0 ? formatCurrency(row.rate) : "-"}
-                                                        </td>
-                                                        <td className="py-2 px-4 text-right border-r border-[#D1D1CB] font-mono font-bold whitespace-nowrap">
-                                                            <span className={isCr ? "text-[#166534]" : "text-[#DC2626]"}>
-                                                                {formatCurrency(row.amount)}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-2 px-3 text-center border-r border-[#D1D1CB] whitespace-nowrap">
-                                                            <span
-                                                                className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${isCr
-                                                                    ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]"
-                                                                    : "bg-[#FEE2E2] text-[#991B1B] border border-[#FCA5A5]"
-                                                                    }`}
-                                                            >
-                                                                {row.crDr}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-2 px-3 text-center whitespace-nowrap">
-                                                            <div className="flex items-center justify-center gap-1.5">
-                                                                <button
-                                                                    onClick={() => setViewRecord(row)}
-                                                                    className="w-6 h-6 rounded-xs bg-white hover:bg-[#F5F5F2] border border-[#D1D1CB] text-[#444444] flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                    title="View"
-                                                                >
-                                                                    <FaEye size={10} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDeleteVoucher(row.id)}
-                                                                    className="w-6 h-6 rounded-xs bg-white hover:bg-[#FEF2F2] border border-[#D1D1CB] hover:border-[#FCA5A5] text-[#DC2626] flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                    title="Delete"
-                                                                >
-                                                                    <FaTrash size={9} />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        ) : (
-                                            <tr>
-                                                <td colSpan="9" className="py-10 text-center text-[#777777]">
-                                                    <FaFileSignature className="mx-auto text-[#CCCCCC] text-2xl mb-2" />
-                                                    <p className="text-sm text-[#333333] font-semibold">No trade vouchers found</p>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-            <Pagination
-              currentPage={currentPage}
-              totalItems={filteredVouchers.length}
-              itemsPerPage={itemsPerPage}
-              onPageChange={setCurrentPage}
-              onItemsPerPageChange={setItemsPerPage}
-            />
-
-                        </div>
                     </div>
                 )}
 
@@ -1239,7 +1120,7 @@ const [searchQuery, setSearchQuery] = useState("");
                                         <input
                                             type="number"
                                             value={modalFormData.amount}
-                                            onChange={(e) => setModalFormData({ ...modalFormData, amount: e.target.value })}
+                                            onChange={(e) => handleCaratOrRateChange("amount", e.target.value)}
                                             placeholder="Amount"
                                             className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-bold outline-none"
                                         />
@@ -1254,7 +1135,7 @@ const [searchQuery, setSearchQuery] = useState("");
                                         <input
                                             type="number"
                                             value={modalFormData.amount}
-                                            onChange={(e) => setModalFormData({ ...modalFormData, amount: e.target.value })}
+                                            onChange={(e) => handleCaratOrRateChange("amount", e.target.value)}
                                             placeholder="Enter amount"
                                             className="w-full px-3 py-2 bg-white border border-[#D1D1CB] focus:border-black rounded-sm text-xs font-bold outline-none"
                                         />
@@ -1271,9 +1152,6 @@ const [searchQuery, setSearchQuery] = useState("");
                                         >
                                             <option value="Bank Transfer">Bank Transfer</option>
                                             <option value="Cash">Cash</option>
-                                            <option value="Dubai Wire">Dubai Wire</option>
-                                            <option value="Angadia">Angadia</option>
-                                            <option value="Cheque">Cheque</option>
                                         </select>
                                     </div>
                                 </div>

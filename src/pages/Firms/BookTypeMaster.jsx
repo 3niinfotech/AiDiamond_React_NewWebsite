@@ -58,6 +58,8 @@ const BookTypeMaster = () => {
   // Toast
   const [toastMessage, setToastMessage] = useState(null);
 
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     const user = authUser || getAuthUser();
     if (!user) {
@@ -69,10 +71,17 @@ const BookTypeMaster = () => {
   }, [authUser]);
 
   const loadBookTypes = async () => {
-    const res = await rsBookTypeMasterService.getAllBookTypes();
-    if (res.success && res.data) {
-      setBookTypes(res.data);
-      setIsApiConnected(Boolean(res.isApi));
+    setIsLoading(true);
+    try {
+      const res = await rsBookTypeMasterService.getAllBookTypes();
+      if (res.success && res.data) {
+        setBookTypes(res.data);
+        setIsApiConnected(Boolean(res.isApi));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,6 +113,23 @@ const BookTypeMaster = () => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredBookTypes.slice(start, start + itemsPerPage);
   }, [filteredBookTypes, currentPage, itemsPerPage]);
+
+  // Checkbox selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedBookTypes.length && paginatedBookTypes.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedBookTypes.map((v, i) => v.id || v.typeId || i));
+    }
+  };
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+  const isAllSelected =
+    paginatedBookTypes.length > 0 && selectedIds.length === paginatedBookTypes.length;
 
   // Handlers for Create
   const handleOpenCreateModal = () => {
@@ -332,43 +358,81 @@ const BookTypeMaster = () => {
 
         {/* Table List */}
         <div className="bg-white border border-[#D1D1CB] rounded-sm overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-210px)] relative">
+            <table className="w-full text-left border-collapse border border-[#E0E0DB] text-xs">
+              <thead className="sticky top-0 z-20 bg-[#FAF9F5] shadow-xs">
                 <tr className="bg-[#FAF9F5] border-b border-[#D1D1CB] text-[10px] font-bold uppercase tracking-wider text-[#555555]">
-                  <th className="py-2.5 px-4 w-12 text-center">#</th>
-                  <th className="py-2.5 px-4">Book Type Name</th>
-                  <th className="py-2.5 px-4">Short Code</th>
-                  <th className="py-2.5 px-4">Description</th>
-                  <th className="py-2.5 px-4 text-center">Status</th>
+                  <th className="py-2.5 px-2.5 w-9 text-center border-r border-[#E0E0DB] whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                      title="Select all rows"
+                    />
+                  </th>
+                  <th className="py-2.5 px-3 text-center border-r border-[#E0E0DB] whitespace-nowrap font-semibold">
+                    SR NO
+                  </th>
+                  <th className="py-2.5 px-4 border-r border-[#E0E0DB]">Book Type Name</th>
+                  <th className="py-2.5 px-4 border-r border-[#E0E0DB]">Short Code</th>
+                  <th className="py-2.5 px-4 border-r border-[#E0E0DB]">Description</th>
+                  <th className="py-2.5 px-4 text-center border-r border-[#E0E0DB]">Status</th>
                   <th className="py-2.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAEA]">
-                {paginatedBookTypes.length === 0 ? (
+                {isLoading ? (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-[#888888] text-xs">
+                    <td colSpan="7" className="py-16 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2.5">
+                        <div className="w-8 h-8 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-semibold text-[#555555]">
+                          Loading book types...
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : paginatedBookTypes.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-8 text-center text-[#888888] text-xs">
                       No book types found. Click "Add Book Type" to create one.
                     </td>
                   </tr>
                 ) : (
-                  paginatedBookTypes.map((typeItem, index) => (
-                    <tr key={typeItem.id || typeItem.typeId || index} className="hover:bg-[#FAF9F5] transition-colors">
-                      <td className="py-3 px-4 text-center font-mono text-[#777777]">
+                  paginatedBookTypes.map((typeItem, index) => {
+                    const rowId = typeItem.id || typeItem.typeId || index;
+                    const isSelected = selectedIds.includes(rowId);
+                    return (
+                    <tr
+                      key={rowId}
+                      className={`transition-colors ${
+                        isSelected ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-[#FAF9F5]"
+                      }`}
+                    >
+                      <td className="py-3 px-2.5 text-center border-r border-[#EAEAEA]">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRow(rowId)}
+                          className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        />
+                      </td>
+                      <td className="py-3 px-2.5 text-center font-mono text-xs text-[#777777] border-r border-[#EAEAEA]">
                         {(currentPage - 1) * itemsPerPage + index + 1}
                       </td>
-                      <td className="py-3 px-4 font-bold text-[#111111]">
+                      <td className="py-3 px-4 font-bold text-[#111111] border-r border-[#EAEAEA]">
                         {typeItem.name}
                       </td>
-                      <td className="py-3 px-4 font-mono font-semibold text-[#555555]">
+                      <td className="py-3 px-4 font-mono font-semibold text-[#555555] border-r border-[#EAEAEA]">
                         <span className="bg-[#F0F0EC] border border-[#E0E0DA] px-2 py-0.5 rounded-sm">
                           {typeItem.shortCode || "TYP"}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-[#555555] max-w-xs truncate">
+                      <td className="py-3 px-4 text-[#555555] max-w-xs truncate border-r border-[#EAEAEA]">
                         {typeItem.description || "-"}
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-center border-r border-[#EAEAEA]">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[10px] font-semibold ${
                             typeItem.isActive
@@ -398,20 +462,21 @@ const BookTypeMaster = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
           {/* Footer Pagination */}
-          <div className="p-3 bg-[#FAF9F5] border-t border-[#D1D1CB] flex items-center justify-between">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredBookTypes.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={setItemsPerPage}
+          />
         </div>
       </main>
 

@@ -2,6 +2,7 @@ import { formatDateDDMMYYYY } from "../../utils/formatUtils";
 import { Pagination } from "../../components/Pagination";
 import { rsPartyMasterService } from "../../services/rsPartyMasterService";
 import { rsSignatureVoucherService } from "../../services/rsSignatureVoucherService";
+import { SearchablePartySelect } from "../../components/SearchablePartySelect";
 import React, { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -159,14 +160,30 @@ const [searchTerm, setSearchTerm] = useState("");
       (p) => p.firmName === (v.purchaseParty || v.partyName)
     );
 
+    const rawAmt = v.totalAmountDollar || (v.amount !== undefined && v.amount !== null && v.amount !== "" ? String(v.amount) : "");
+    const amtNum = parseFloat(rawAmt);
+    const rawCarats = v.carat || (v.carats !== undefined && v.carats !== null ? String(v.carats) : "");
+    const caratsNum = parseFloat(rawCarats);
+    const rawRate = v.perCarat || (v.rate !== undefined && v.rate !== null ? String(v.rate) : "");
+
+    let effectiveRate = rawRate;
+    if ((!effectiveRate || parseFloat(effectiveRate) === 0) && amtNum > 0 && caratsNum > 0) {
+      effectiveRate = (Math.round((amtNum / caratsNum) * 100) / 100).toFixed(2);
+    }
+
+    let effectiveAed = v.aed !== undefined && v.aed !== null ? String(v.aed) : "";
+    if ((!effectiveAed || parseFloat(effectiveAed) === 0) && amtNum > 0) {
+      effectiveAed = (Math.round(amtNum * 3.6725 * 100) / 100).toFixed(2);
+    }
+
     setFormData({
       date: v.pDate || v.date || new Date().toISOString().split("T")[0],
       partyName: existingParty ? existingParty.firmName : "__custom__",
       customParty: existingParty ? "" : (v.purchaseParty || v.partyName || ""),
       itemDescription: v.itemDescription || "",
-      carats: v.carat || (v.carats !== undefined ? String(v.carats) : ""),
-      rate: v.perCarat || (v.rate !== undefined ? String(v.rate) : ""),
-      amount: v.totalAmountDollar || (v.amount !== undefined ? String(v.amount) : ""),
+      carats: rawCarats,
+      rate: effectiveRate,
+      amount: rawAmt,
       currency: v.currency || "USD",
       paymentMode: v.paymentMode || "Bank Transfer",
       invoiceNo: v.invoiceNo || "",
@@ -174,7 +191,7 @@ const [searchTerm, setSearchTerm] = useState("");
       dueDate: v.dueDate || "",
       dueDays: v.dueDays ? String(v.dueDays) : "",
       pcs: v.pcs ? String(v.pcs) : "",
-      aed: v.aed ? String(v.aed) : "",
+      aed: effectiveAed,
       remark: v.remark || "",
       note: v.note || "",
       saleInvoiceNo: v.saleInvoiceNo || "",
@@ -220,12 +237,41 @@ const [searchTerm, setSearchTerm] = useState("");
   const handleInputChange = (field, val) => {
     const updated = { ...formData, [field]: val };
 
-    // Auto calculate amount when carats or rate change
-    if (field === "carats" || field === "rate") {
-      const c = parseFloat(field === "carats" ? val : formData.carats);
-      const r = parseFloat(field === "rate" ? val : formData.rate);
-      if (!isNaN(c) && !isNaN(r) && c > 0 && r > 0) {
-        updated.amount = Math.round(c * r * 100) / 100;
+    // Auto calculation:
+    // Per carat = Total amount / carat 
+    // AED = Total Amount * 3.6725
+    if (field === "amount") {
+      const amt = parseFloat(val);
+      const c = parseFloat(formData.carats);
+      if (!isNaN(amt) && amt > 0) {
+        updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+        if (!isNaN(c) && c > 0) {
+          updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+        }
+      } else if (val === "") {
+        updated.aed = "";
+      }
+    } else if (field === "carats") {
+      const c = parseFloat(val);
+      const amt = parseFloat(formData.amount);
+      const r = parseFloat(formData.rate);
+      if (!isNaN(c) && c > 0) {
+        if (!isNaN(amt) && amt > 0) {
+          updated.rate = (Math.round((amt / c) * 100) / 100).toFixed(2);
+          updated.aed = (Math.round(amt * 3.6725 * 100) / 100).toFixed(2);
+        } else if (!isNaN(r) && r > 0) {
+          const calcAmt = Math.round(c * r * 100) / 100;
+          updated.amount = calcAmt.toFixed(2);
+          updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
+        }
+      }
+    } else if (field === "rate") {
+      const r = parseFloat(val);
+      const c = parseFloat(formData.carats);
+      if (!isNaN(r) && r > 0 && !isNaN(c) && c > 0) {
+        const calcAmt = Math.round(c * r * 100) / 100;
+        updated.amount = calcAmt.toFixed(2);
+        updated.aed = (Math.round(calcAmt * 3.6725 * 100) / 100).toFixed(2);
       }
     }
 
@@ -467,6 +513,22 @@ const [searchTerm, setSearchTerm] = useState("");
     return (filteredEntries || []).slice(start, start + itemsPerPage);
   }, [filteredEntries, currentPage, itemsPerPage]);
 
+  // Checkbox selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginatedList.length && paginatedList.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedList.map((v, i) => v.id || v.voucherId || i));
+    }
+  };
+  const toggleSelectRow = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+  const isAllSelected =
+    paginatedList.length > 0 && selectedIds.length === paginatedList.length;
 
   // Specific Stats for this page
   const stats = useMemo(() => {
@@ -501,10 +563,10 @@ const [searchTerm, setSearchTerm] = useState("");
         <div className="flex items-center gap-3">
           <Link
             to="/signature"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#F5F5F2] hover:bg-[#EBEBE6] border border-[#E0E0DB] text-xs font-semibold text-[#333333] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white hover:bg-[#111111] text-[#111111] hover:text-white border border-[#D1D1CB] hover:border-[#111111] text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs"
           >
             <FaArrowLeft size={10} />
-            <span>Back to Signature</span>
+            <span>Back to Signature Account</span>
           </Link>
           <span className="h-4 w-px bg-[#E0E0DB]" />
           <div className="flex items-center gap-2">
@@ -680,40 +742,52 @@ const [searchTerm, setSearchTerm] = useState("");
           {/* Entries Table */}
           <div className="bg-white border border-[#D1D1CB] rounded-sm shadow-2xs overflow-hidden">
             <div className="overflow-x-auto firm-table-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-xs border-collapse border border-[#E0E0DB]">
                 <thead>
                   <tr className="border-b border-[#D1D1CB] bg-[#F5F5F2] text-[#555555] font-bold uppercase tracking-wider text-[10px] whitespace-nowrap">
-                    <th className="py-2.5 px-3">P.Date</th>
-                    <th className="py-2.5 px-3">Invoice No</th>
-                    <th className="py-2.5 px-3">Terms</th>
-                    <th className="py-2.5 px-3">Due Date</th>
-                    <th className="py-2.5 px-3">Due Days</th>
-                    <th className="py-2.5 px-3">Purchase Party</th>
-                    <th className="py-2.5 px-3 text-right">Pcs</th>
-                    <th className="py-2.5 px-3 text-right">Carat</th>
-                    <th className="py-2.5 px-3 text-right">Per Carat</th>
-                    <th className="py-2.5 px-3 text-right">Total Amount $</th>
-                    <th className="py-2.5 px-3 text-right">AED</th>
-                    <th className="py-2.5 px-3">Remark</th>
-                    <th className="py-2.5 px-3">Note</th>
-                    <th className="py-2.5 px-3">Sale Invoice No</th>
-                    <th className="py-2.5 px-3 text-right">Sale Carat</th>
-                    <th className="py-2.5 px-3 text-right">Balance CT</th>
-                    <th className="py-2.5 px-3">Broker</th>
-                    <th className="py-2.5 px-3">DT Dec Date</th>
-                    <th className="py-2.5 px-3">DT Dec Due Date</th>
-                    <th className="py-2.5 px-3">DT Dec No</th>
-                    <th className="py-2.5 px-3">Dubai File Date</th>
-                    <th className="py-2.5 px-3">Dubai Trade Status</th>
-                    <th className="py-2.5 px-3">DH Entry</th>
-                    <th className="py-2.5 px-3">Remark</th>
+                    <th className="py-2.5 px-2.5 text-center border-r border-[#E0E0DB] w-9 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                        title="Select all rows"
+                      />
+                    </th>
+                    <th className="py-2.5 px-3 text-center border-r border-[#E0E0DB] whitespace-nowrap font-semibold">
+                      SR NO
+                    </th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">P.Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Invoice No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Terms</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Due Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Due Days</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Purchase Party</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Pcs</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Carat</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Per Carat</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Total Amount $</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">AED</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Remark</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Note</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Sale Invoice No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Sale Carat</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB] text-right">Balance CT</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Broker</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec Due Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DT Dec No</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Dubai File Date</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Dubai Trade Status</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">DH Entry</th>
+                    <th className="py-2.5 px-3 border-r border-[#E0E0DB]">Remark</th>
                     <th className="py-2.5 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EAEAEA]">
                   {paginatedList.length === 0 ? (
                     <tr>
-                      <td colSpan={25} className="py-12 text-center text-[#777777]">
+                      <td colSpan={27} className="py-12 text-center text-[#777777]">
                         <IconComponent
                           className="mx-auto mb-2 text-[#CCCCCC]"
                           size={28}
@@ -727,86 +801,100 @@ const [searchTerm, setSearchTerm] = useState("");
                       </td>
                     </tr>
                   ) : (
-                    paginatedList.map((v, idx) => (
+                    paginatedList.map((v, idx) => {
+                      const rowId = v.id || v.voucherId || idx;
+                      const isSelected = selectedIds.includes(rowId);
+                      return (
                       <tr
                         key={v.id || idx}
                         className={`hover:bg-[#F9F9F7] transition-colors ${
-                          idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
+                          isSelected ? "bg-amber-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#FCFCFA]"
                         }`}
                       >
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA]">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(rowId)}
+                            className="w-3.5 h-3.5 rounded-xs border-[#D1D1CB] text-black focus:ring-black cursor-pointer align-middle"
+                          />
+                        </td>
+                        <td className="py-2 px-2.5 text-center border-r border-[#EAEAEA] font-mono text-xs text-[#777777] whitespace-nowrap">
+                          {(currentPage - 1) * itemsPerPage + idx + 1}
+                        </td>
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.pDate || v.date || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.invoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[11px] whitespace-nowrap text-[#555555]">
                           {v.terms || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dueDate || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dueDays || "-"}
                         </td>
-                        <td className="py-2 px-3 font-semibold text-[#111111] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-semibold text-[#111111] whitespace-nowrap">
                           {v.purchaseParty || v.partyName || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.pcs || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-semibold text-[#111111] whitespace-nowrap">
                           {v.carat || (v.carats ? Number(v.carats).toFixed(2) : "-")}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.perCarat || (v.rate ? formatCurrency(v.rate) : "-")}
                         </td>
                         <td
-                          className="py-2 px-3 text-right font-mono font-bold whitespace-nowrap"
+                          className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono font-bold whitespace-nowrap"
                           style={{ color: config.color }}
                         >
                           {v.totalAmountDollar || (v.amount ? formatCurrency(v.amount) : "-")}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.aed || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
                           {v.remark || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
                           {v.note || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.saleInvoiceNo || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.saleCarat || "-"}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-right font-mono text-[#555555] whitespace-nowrap">
                           {v.balanceCt || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap">
                           {v.broker || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecDueDate || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dtDecNo || "-"}
                         </td>
-                        <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-[#555555]">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] font-mono text-[11px] whitespace-nowrap text-[#555555]">
                           {v.dubaiFileDate || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap">
                           {v.dubaiTradeStatus || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap">
                           {v.dhEntry || "-"}
                         </td>
-                        <td className="py-2 px-3 text-[#555555] whitespace-nowrap max-w-[150px] truncate">
+                        <td className="py-2 px-3 border-r border-[#EAEAEA] text-[#555555] whitespace-nowrap max-w-[150px] truncate">
                           {v.remark2 || v.remark || "-"}
                         </td>
                         <td className="py-2 px-3 text-center whitespace-nowrap">
@@ -835,7 +923,8 @@ const [searchTerm, setSearchTerm] = useState("");
                           </div>
                         </td>
                       </tr>
-                    ))
+                    );
+                  })
                   )}
                 </tbody>
               </table>
@@ -949,36 +1038,14 @@ const [searchTerm, setSearchTerm] = useState("");
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
                         Purchase Party *
                       </label>
-                      <select
+                      <SearchablePartySelect
                         value={formData.partyName}
-                        onChange={(e) => handleInputChange("partyName", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
+                        onChange={(val) => handleInputChange("partyName", val)}
+                        parties={allAvailableParties}
+                        error={formErrors.partyName}
                         required
-                      >
-                        <option value="">-- Select Purchase Party --</option>
-                        {allAvailableParties.map((p) => (
-                          <option key={p.id} value={p.name || p.partyName}>
-                            {p.name}
-                          </option>
-                        ))}
-                        <option value="__custom__">+ Enter Custom Party Name</option>
-                      </select>
-                      {formErrors.partyName && (
-                        <p className="text-[10px] text-red-600 mt-0.5">{formErrors.partyName}</p>
-                      )}
-
-                      {formData.partyName === "__custom__" && (
-                        <div className="mt-2">
-                          <input
-                            type="text"
-                            placeholder="Type Custom Party Name..."
-                            value={formData.customParty}
-                            onChange={(e) => handleInputChange("customParty", e.target.value)}
-                            className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                            autoFocus
-                          />
-                        </div>
-                      )}
+                        placeholder="Search party by name, code, location..."
+                      />
                     </div>
 
                     <div>
@@ -1081,59 +1148,10 @@ const [searchTerm, setSearchTerm] = useState("");
                   </div>
                 </div>
 
-                {/* Section 3: Sale & Balance Details */}
+                {/* Section 3: Dubai Trade Tracking */}
                 <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
                   <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    3. Sale & Balance Details
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Sale Invoice No
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Linked Sale INV #"
-                        value={formData.saleInvoiceNo}
-                        onChange={(e) => handleInputChange("saleInvoiceNo", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] focus:outline-hidden focus:border-[#111111]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Sale Carat
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Sold Carat"
-                        value={formData.saleCarat}
-                        onChange={(e) => handleInputChange("saleCarat", e.target.value)}
-                        className="w-full bg-white border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs text-[#111111] font-mono focus:outline-hidden focus:border-[#111111]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#555555] mb-1">
-                        Balance CT (Auto)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Remaining"
-                        value={formData.balanceCt}
-                        disabled
-                        className="w-full bg-[#F5F5F2] text-[#555555] border border-[#D1D1CB] rounded-sm px-2.5 py-1.5 text-xs font-mono font-semibold cursor-not-allowed focus:outline-hidden"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 4: Dubai Trade Tracking */}
-                <div className="bg-[#FAFAF8] p-3 rounded border border-[#E8E8E4] space-y-2.5">
-                  <div className="text-[10px] uppercase font-bold text-[#111111] tracking-wider border-b border-[#E0E0DB] pb-1">
-                    4. Dubai Trade Tracking
+                    3. Dubai Trade Tracking
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
